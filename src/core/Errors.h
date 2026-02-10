@@ -20,16 +20,16 @@ struct Diagnostic {
 class DiagnosticList {
 public:
   void reportError(const u32 &errorCode, const std::string &message,
-                   const SourceLocation &location = SourceLocation::empty());
+                   const SourceLocation &location);
 
   void reportWarning(const u32 &errorCode, const std::string &message,
-                     const SourceLocation &location = SourceLocation::empty());
+                     const SourceLocation &location);
 
   void reportInfo(const u32 &errorCode, const std::string &message,
-                  const SourceLocation &location = SourceLocation::empty());
+                  const SourceLocation &location);
 
   void reportInternal(const u32 &errorCode, const std::string &message,
-                      const SourceLocation &location = SourceLocation::empty());
+                      const SourceLocation &location);
 
   bool empty() const;
   size_t size() const;

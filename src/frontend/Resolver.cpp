@@ -181,14 +181,14 @@ void Resolver::resolveExpr(const ExprPtr &expr) {
     for (const auto &arg : call.arguments) {
       resolveExpr(arg);
     }
-    resolveCallExpr(call);
+    resolveCallExpr(call, expr->location);
   } else if (std::holds_alternative<VarExpr>(*expr)) {
     const auto &var = std::get<VarExpr>(*expr);
 
     if (const auto scopedId = findScopedSymbol(var.identifier)) {
       var.identifier.symbolId = scopedId.value();
     } else {
-      reportUnresolved(var.identifier, var.location);
+      reportUnresolved(var.identifier, expr->location);
     }
   } else if (std::holds_alternative<UnaryExpr>(*expr)) {
     const auto &unaryExpr = std::get<UnaryExpr>(*expr);
@@ -202,12 +202,14 @@ void Resolver::resolveExpr(const ExprPtr &expr) {
   }
 }
 
-std::optional<SymbolId> Resolver::resolveCallExpr(const CallExpr &call) {
+std::optional<SymbolId>
+Resolver::resolveCallExpr(const CallExpr &call,
+                          const core::SourceLocation &location) {
   // Find all functions with the given name
   const auto candidates =
       m_symbols.findAll(SymbolKind::Function, call.identifier);
   if (candidates.empty()) {
-    reportUnresolvedOverload(call.identifier, call.location);
+    reportUnresolvedOverload(call.identifier, location);
     return std::nullopt;
   }
 
@@ -240,7 +242,7 @@ std::optional<SymbolId> Resolver::resolveCallExpr(const CallExpr &call) {
       if (hasMatch) {
         // Potentially redundant. Ambiguous overloads should be caught in
         // function declaration resolving.
-        reportAmbiguousOverload(call.identifier, call.location);
+        reportAmbiguousOverload(call.identifier, location);
         return std::nullopt;
       }
       matchedId = symbolId;
@@ -249,7 +251,7 @@ std::optional<SymbolId> Resolver::resolveCallExpr(const CallExpr &call) {
   }
 
   if (!hasMatch) {
-    reportUnresolvedOverload(call.identifier, call.location);
+    reportUnresolvedOverload(call.identifier, location);
     return std::nullopt;
   }
 
@@ -290,7 +292,7 @@ std::optional<SymbolId> Resolver::resolveExprType(const ExprPtr &expr) {
   }
   if (std::holds_alternative<CallExpr>(*expr)) {
     const auto &call = std::get<CallExpr>(*expr);
-    auto resolvedId = resolveCallExpr(call);
+    auto resolvedId = resolveCallExpr(call, expr->location);
     if (resolvedId.has_value()) {
       const auto &symbol = m_symbols.get(resolvedId.value());
       if (const auto *info = std::get_if<FunctionInfo>(&symbol.info)) {

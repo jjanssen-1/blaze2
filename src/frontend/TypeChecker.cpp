@@ -1,5 +1,6 @@
 #include "TypeChecker.h"
 
+#include "core/Source.h"
 #include "frontend/Ast.h"
 
 #include "core/Errors.h"
@@ -19,14 +20,14 @@ void TypeChecker::checkFunctionSpecs(const FunctionSpecifications &spec) {
   for (const auto &expr : spec.pre) {
     auto type = getExprType(expr);
     if (type.has_value() && type.value() != boolType) {
-      reportTypeMismatch(boolType, type.value());
+      reportTypeMismatch(boolType, type.value(), expr->location);
     }
   }
 
   for (const auto &expr : spec.post) {
     auto type = getExprType(expr);
     if (type.has_value() && type.value() != boolType) {
-      reportTypeMismatch(boolType, type.value());
+      reportTypeMismatch(boolType, type.value(), expr->location);
     }
   }
 }
@@ -64,7 +65,8 @@ void TypeChecker::checkStatement(const Statement &stmt) {
 
     if (!m_currentReturnType.has_value()) {
       m_diagnostics.reportError(core::ERROR_ILLEGAL_STATEMENT,
-                                "Return statement outside of function");
+                                "Return statement outside of function",
+                                retStmt.location);
       return;
     }
 
@@ -75,7 +77,8 @@ void TypeChecker::checkStatement(const Statement &stmt) {
         // "actual" type so the message is meaningful.
         const auto *voidEntry = m_builtins.findType("void");
         if (voidEntry) {
-          reportTypeMismatch(*m_currentReturnType, voidEntry->symbolId);
+          reportTypeMismatch(*m_currentReturnType, voidEntry->symbolId,
+                             retStmt.location);
         }
       }
       return;
@@ -84,7 +87,7 @@ void TypeChecker::checkStatement(const Statement &stmt) {
     // Expression is present — its type must match the function's return type.
     auto type = getExprType(retStmt.expression.value());
     if (type.has_value() && !expectType(*m_currentReturnType, type.value())) {
-      reportTypeMismatch(*m_currentReturnType, type.value());
+      reportTypeMismatch(*m_currentReturnType, type.value(), retStmt.location);
     }
   } else if (std::holds_alternative<IfStmt>(stmt)) {
     const IfStmt &statement = std::get<IfStmt>(stmt);
@@ -92,7 +95,8 @@ void TypeChecker::checkStatement(const Statement &stmt) {
     auto conditionType = getExprType(statement.condition);
     if (!conditionType.has_value() || !isBoolean(*conditionType)) {
       m_diagnostics.reportError(core::ERROR_TYPE_MISMATCH,
-                                "Condition must be a boolean expression");
+                                "Condition must be a boolean expression",
+                                statement.location);
       m_error = true;
     }
 
@@ -108,7 +112,8 @@ void TypeChecker::checkStatement(const Statement &stmt) {
 
     if (!conditionType.has_value() || !isBoolean(*conditionType)) {
       m_diagnostics.reportError(core::ERROR_TYPE_MISMATCH,
-                                "Condition must be a boolean expression");
+                                "Condition must be a boolean expression",
+                                statement.location);
       m_error = true;
     }
     checkStatement(*statement.body);
@@ -128,7 +133,7 @@ void TypeChecker::checkDeclaration(const DeclStmt &decl) {
   auto declType = decl.type.identifier.symbolId;
   auto exprType = getExprType(decl.assignedExpression);
   if (declType && exprType && !expectType(*declType, *exprType)) {
-    reportTypeMismatch(*declType, *exprType);
+    reportTypeMismatch(*declType, *exprType, decl.location);
   }
 }
 
@@ -145,7 +150,8 @@ bool TypeChecker::isBoolean(const SymbolId &type) {
 void TypeChecker::checkExpression(const ExprPtr &expr) {
   if (!expr) {
     m_diagnostics.reportInternal(core::ERROR_INTERNAL_ERROR,
-                                 "Tried to check a null expression");
+                                 "Tried to check a null expression",
+                                 core::SourceLocation::empty());
     return;
   }
   if (std::holds_alternative<BinaryExpr>(*expr)) {
@@ -158,7 +164,7 @@ void TypeChecker::checkExpression(const ExprPtr &expr) {
     auto rightType = getExprType(binaryExpr.right);
     if (leftType.has_value() && rightType.has_value() &&
         !expectType(*leftType, *rightType)) {
-      reportTypeMismatch(*leftType, *rightType);
+      reportTypeMismatch(*leftType, *rightType, expr->location);
     }
   } else if (std::holds_alternative<UnaryExpr>(*expr)) {
     const auto &unaryExpr = std::get<UnaryExpr>(*expr);
@@ -174,12 +180,14 @@ void TypeChecker::checkExpression(const ExprPtr &expr) {
 }
 
 void TypeChecker::reportTypeMismatch(const SymbolId &expected,
-                                     const SymbolId &actual) {
+                                     const SymbolId &actual,
+                                     const core::SourceLocation &location) {
   m_error = true;
   m_diagnostics.reportError(
       core::ERROR_TYPE_MISMATCH,
       "Type mismatch: expected '" + std::string(typeName(expected)) +
-          "' but got '" + std::string(typeName(actual)) + "'");
+          "' but got '" + std::string(typeName(actual)) + "'",
+      location);
 }
 
 std::string_view TypeChecker::typeName(const SymbolId &type) const {

@@ -157,8 +157,8 @@ std::any BlazeVisitorImpl::visitAddExpr(BlazeParser::AddExprContext *ctx) {
     const BinaryOperation op = ctx->getToken(BlazeParser::PLUS, i - 1)
                                    ? BinaryOperation::Addition
                                    : BinaryOperation::Subtraction;
-    BinaryExpr expr(loc, op, current, rhs);
-    current = std::make_shared<Expression>(Expression{expr});
+    BinaryExpr expr(op, current, rhs);
+    current = std::make_shared<Expression>(loc, expr);
   }
 
   return current;
@@ -173,8 +173,8 @@ std::any BlazeVisitorImpl::visitMulExpr(BlazeParser::MulExprContext *ctx) {
     const BinaryOperation op = ctx->getToken(BlazeParser::STAR, i - 1)
                                    ? BinaryOperation::Multiplication
                                    : BinaryOperation::Division;
-    BinaryExpr expr(loc, op, current, rhs);
-    current = std::make_shared<Expression>(Expression{expr});
+    BinaryExpr expr(op, current, rhs);
+    current = std::make_shared<Expression>(loc, expr);
   }
 
   return current;
@@ -190,8 +190,8 @@ std::any BlazeVisitorImpl::visitUnaryExpr(BlazeParser::UnaryExprContext *ctx) {
   if (!ctx->getToken(BlazeParser::NOT, 0)) {
     return operand;
   }
-  UnaryExpr expr(loc, UnaryOperation::Negation, operand);
-  return std::make_shared<Expression>(Expression{expr});
+  UnaryExpr expr(UnaryOperation::Negation, operand);
+  return std::make_shared<Expression>(loc, expr);
 }
 
 std::any BlazeVisitorImpl::visitCallExpr(BlazeParser::CallExprContext *ctx) {
@@ -202,7 +202,7 @@ std::any BlazeVisitorImpl::visitCallExpr(BlazeParser::CallExprContext *ctx) {
   }
 
   Identifier identifier{identNode ? identNode->getText() : std::string{}};
-  CallExpr output(loc, identifier);
+  CallExpr output(identifier);
 
   if (ctx->argList()) {
     auto arguments =
@@ -210,7 +210,7 @@ std::any BlazeVisitorImpl::visitCallExpr(BlazeParser::CallExprContext *ctx) {
     output.arguments = std::move(arguments);
   }
 
-  return std::make_shared<Expression>(Expression{output});
+  return std::make_shared<Expression>(loc, output);
 }
 
 std::any BlazeVisitorImpl::visitVarExpr(BlazeParser::VarExprContext *ctx) {
@@ -221,8 +221,8 @@ std::any BlazeVisitorImpl::visitVarExpr(BlazeParser::VarExprContext *ctx) {
   }
 
   Identifier identifier{identNode ? identNode->getText() : std::string{}};
-  VarExpr output(loc, identifier);
-  return std::make_shared<Expression>(Expression{output});
+  VarExpr output(identifier);
+  return std::make_shared<Expression>(loc, output);
 }
 
 std::any BlazeVisitorImpl::visitIntExpr(BlazeParser::IntExprContext *ctx) {
@@ -230,19 +230,19 @@ std::any BlazeVisitorImpl::visitIntExpr(BlazeParser::IntExprContext *ctx) {
   auto *token = ctx->Integer();
   if (!token) {
     // TODO: report Internal error.
-    return std::make_shared<Expression>(Expression{IntExpr(loc, 0)});
+    return std::make_shared<Expression>(loc, IntExpr(0));
   }
 
   const auto value = static_cast<core::u64>(std::stoull(token->getText()));
-  IntExpr output(loc, value);
-  return std::make_shared<Expression>(Expression{output});
+  IntExpr output(value);
+  return std::make_shared<Expression>(loc, output);
 }
 
 std::any BlazeVisitorImpl::visitBoolExpr(BlazeParser::BoolExprContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
   const bool value = ctx->TRUE() != nullptr;
-  BoolExpr output(loc, value);
-  return std::make_shared<Expression>(Expression{output});
+  BoolExpr output(value);
+  return std::make_shared<Expression>(loc, output);
 }
 
 std::any BlazeVisitorImpl::visitParenExpr(BlazeParser::ParenExprContext *ctx) {

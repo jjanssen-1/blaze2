@@ -70,57 +70,59 @@ struct Param {
 
 enum BinaryOperation { Addition, Subtraction, Multiplication, Division };
 
-struct BinaryExpr : public AstNode {
-  inline BinaryExpr(const core::SourceLocation &location,
-                    const BinaryOperation &op, const ExprPtr &lhs,
+struct BinaryExpr {
+  inline BinaryExpr(const BinaryOperation &op, const ExprPtr &lhs,
                     const ExprPtr &rhs)
-      : AstNode(location), operation(op), left(lhs), right(rhs) {}
+      : operation(op), left(lhs), right(rhs) {}
   const BinaryOperation operation;
   const ExprPtr left, right;
 };
 
 enum UnaryOperation { Negation };
 
-struct UnaryExpr : public AstNode {
-  inline UnaryExpr(const core::SourceLocation &location,
-                   const UnaryOperation &op, const ExprPtr &operand)
-      : AstNode(location), operation(op), operand(operand) {}
+struct UnaryExpr {
+  inline UnaryExpr(const UnaryOperation &op, const ExprPtr &operand)
+      : operation(op), operand(operand) {}
   const UnaryOperation operation;
   const ExprPtr operand;
 };
 
-struct CallExpr : public AstNode {
-  inline CallExpr(const core::SourceLocation &location, const Identifier &ident)
-      : AstNode(location), identifier(ident) {}
+struct CallExpr {
+  inline CallExpr(const Identifier &ident) : identifier(ident) {}
   Identifier identifier;
   std::vector<ExprPtr> arguments;
 };
 
-struct VarExpr : public AstNode {
-  inline VarExpr(const core::SourceLocation &location, const Identifier &ident)
-      : AstNode(location), identifier(ident) {}
+struct VarExpr {
+  inline VarExpr(const Identifier &ident) : identifier(ident) {}
   Identifier identifier;
 };
 
-struct IntExpr : public AstNode {
-  inline IntExpr(const core::SourceLocation &location, const core::u64 num)
-      : AstNode(location), value(num) {}
+struct IntExpr {
+  inline IntExpr(const core::u64 num) : value(num) {}
   const core::u64 value;
 };
 
-struct BoolExpr : public AstNode {
-  inline BoolExpr(const core::SourceLocation &location, bool val)
-      : AstNode(location), value(val) {}
+struct BoolExpr {
+  inline BoolExpr(bool val) : value(val) {}
   const bool value;
 };
 
 // Expression inherits from the variant so that std::holds_alternative,
 // std::get, and std::visit continue to work unchanged, while also carrying
-// a resolvedType field that can be populated during type resolution.
+// a location and resolvedType field.
 struct Expression : public std::variant<BinaryExpr, UnaryExpr, CallExpr,
                                         VarExpr, IntExpr, BoolExpr> {
-  using variant::variant;
-  using variant::operator=;
+  using Variant =
+      std::variant<BinaryExpr, UnaryExpr, CallExpr, VarExpr, IntExpr, BoolExpr>;
+
+  template <typename T, typename = std::enable_if_t<
+                            !std::is_same_v<std::decay_t<T>, Expression> &&
+                            std::is_constructible_v<Variant, T &&>>>
+  Expression(const core::SourceLocation &loc, T &&val)
+      : Variant(std::forward<T>(val)), location(loc) {}
+
+  const core::SourceLocation location;
   mutable std::optional<SymbolId> resolvedType = std::nullopt;
 };
 

@@ -41,7 +41,8 @@ private:
   void checkDeclaration(const DeclStmt &decl);
   void checkExpression(const ExprPtr &expr);
   void checkFunctionSpecs(const FunctionSpecifications &spec);
-  void reportTypeMismatch(const SymbolId &expected, const SymbolId &actual);
+  void reportTypeMismatch(const SymbolId &expected, const SymbolId &actual,
+                          const core::SourceLocation &location);
   bool isVoid(const SymbolId &type);
   bool isBoolean(const SymbolId &type);
   std::string_view typeName(const SymbolId &type) const;

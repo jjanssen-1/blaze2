@@ -37,7 +37,8 @@ private:
   void resolveStatement(const Statement &statement);
   void resolveExpr(const ExprPtr &expr);
   void resolveFunctionSpecs(const FunctionSpecifications &spec);
-  std::optional<SymbolId> resolveCallExpr(const CallExpr &call);
+  std::optional<SymbolId> resolveCallExpr(const CallExpr &call,
+                                          const core::SourceLocation &location);
   std::optional<SymbolId> resolveExprType(const ExprPtr &expr);
   void pushScope();
   void popScope();
