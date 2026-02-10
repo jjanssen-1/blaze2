@@ -1,0 +1,212 @@
+#pragma once
+
+#include "core/Common.h"
+#include "core/Source.h"
+#include "frontend/SymbolId.h"
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
+
+namespace blaze::frontend {
+
+struct AstNode {
+  inline AstNode(const core::SourceLocation &loc) : location(loc) {}
+  const core::SourceLocation location;
+  virtual ~AstNode() = default;
+};
+
+typedef std::shared_ptr<AstNode> AstPtr;
+
+// Forward declarations
+struct Root;
+struct Function;
+struct Param;
+struct TypeName;
+
+// Statements
+struct Block;
+struct DeclStmt;
+struct ReturnStmt;
+struct IfStmt;
+struct WhileStmt;
+
+// Expressions
+struct BinaryExpr;
+struct UnaryExpr;
+struct CallExpr;
+struct VarExpr;
+struct IntExpr;
+struct BoolExpr;
+
+// Expression is forward-declared as a struct so that ExprPtr (shared_ptr) can
+// be used by expression types before Expression is fully defined.
+struct Expression;
+typedef std::shared_ptr<Expression> ExprPtr;
+
+typedef std::shared_ptr<Block> BlockPtr;
+typedef std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt, ExprPtr, BlockPtr>
+    Statement;
+typedef std::shared_ptr<Statement> StmtPtr;
+
+struct Identifier {
+  std::string name;
+  mutable std::optional<SymbolId> symbolId = std::nullopt;
+  bool operator==(const Identifier &other) const { return name == other.name; }
+};
+
+struct TypeName {
+  const Identifier identifier;
+};
+
+struct Param {
+  const Identifier identifier;
+  const TypeName type;
+};
+
+// ---- Expression types ----
+
+enum BinaryOperation { Addition, Subtraction, Multiplication, Division };
+
+struct BinaryExpr : public AstNode {
+  inline BinaryExpr(const core::SourceLocation &location,
+                    const BinaryOperation &op, const ExprPtr &lhs,
+                    const ExprPtr &rhs)
+      : AstNode(location), operation(op), left(lhs), right(rhs) {}
+  const BinaryOperation operation;
+  const ExprPtr left, right;
+};
+
+enum UnaryOperation { Negation };
+
+struct UnaryExpr : public AstNode {
+  inline UnaryExpr(const core::SourceLocation &location,
+                   const UnaryOperation &op, const ExprPtr &operand)
+      : AstNode(location), operation(op), operand(operand) {}
+  const UnaryOperation operation;
+  const ExprPtr operand;
+};
+
+struct CallExpr : public AstNode {
+  inline CallExpr(const core::SourceLocation &location, const Identifier &ident)
+      : AstNode(location), identifier(ident) {}
+  Identifier identifier;
+  std::vector<ExprPtr> arguments;
+};
+
+struct VarExpr : public AstNode {
+  inline VarExpr(const core::SourceLocation &location, const Identifier &ident)
+      : AstNode(location), identifier(ident) {}
+  Identifier identifier;
+};
+
+struct IntExpr : public AstNode {
+  inline IntExpr(const core::SourceLocation &location, const core::u64 num)
+      : AstNode(location), value(num) {}
+  const core::u64 value;
+};
+
+struct BoolExpr : public AstNode {
+  inline BoolExpr(const core::SourceLocation &location, bool val)
+      : AstNode(location), value(val) {}
+  const bool value;
+};
+
+// Expression inherits from the variant so that std::holds_alternative,
+// std::get, and std::visit continue to work unchanged, while also carrying
+// a resolvedType field that can be populated during type resolution.
+struct Expression : public std::variant<BinaryExpr, UnaryExpr, CallExpr,
+                                        VarExpr, IntExpr, BoolExpr> {
+  using variant::variant;
+  using variant::operator=;
+  mutable std::optional<SymbolId> resolvedType = std::nullopt;
+};
+
+// ---- Expression helpers ----
+
+inline std::optional<SymbolId> getExprType(const ExprPtr &expr) {
+  if (!expr)
+    return std::nullopt;
+  return expr->resolvedType;
+}
+
+inline void setExprType(const ExprPtr &expr, SymbolId type) {
+  if (!expr)
+    return;
+  expr->resolvedType = type;
+}
+
+// ---- Statement types ----
+
+struct DeclStmt : public AstNode {
+
+  inline DeclStmt(const core::SourceLocation &location, const Identifier &name,
+                  const TypeName &declType, bool isConst,
+                  const ExprPtr &assignedExpr)
+      : AstNode(location), identifier(name), type(declType),
+        isConstant(isConst), assignedExpression(assignedExpr) {}
+  const bool isConstant;
+  Identifier identifier;
+  const TypeName type;
+  const ExprPtr assignedExpression;
+};
+
+struct ReturnStmt : public AstNode {
+  inline ReturnStmt(const core::SourceLocation &location,
+                    const std::optional<ExprPtr> &expr)
+      : AstNode(location), expression(expr) {}
+
+  const std::optional<ExprPtr> expression;
+};
+
+struct IfStmt : public AstNode {
+  inline IfStmt(const core::SourceLocation &location, const ExprPtr &cond,
+                const StmtPtr &conseq, const std::optional<StmtPtr> &alt)
+      : AstNode(location), condition(cond), consequent(conseq),
+        alternative(alt) {}
+  const ExprPtr condition;
+  const StmtPtr consequent;
+  const std::optional<StmtPtr> alternative;
+};
+
+struct WhileStmt : public AstNode {
+  inline WhileStmt(const core::SourceLocation &location, const ExprPtr &cond,
+                   const StmtPtr &bod)
+      : AstNode(location), condition(cond), body(bod) {}
+  const ExprPtr condition;
+  const StmtPtr body;
+};
+
+// ---- Block, Function, Root ----
+
+struct Block : public AstNode {
+  inline Block(const core::SourceLocation &location) : AstNode(location) {}
+  std::vector<Statement> statements;
+};
+
+struct FunctionSpecifications {
+  std::vector<ExprPtr> pre, post;
+};
+
+struct Function : public AstNode {
+  inline Function(const core::SourceLocation &location, const Identifier &name,
+                  const std::vector<Param> &params,
+                  const std::optional<TypeName> &returnType, const Block &bod,
+                  const FunctionSpecifications &spec)
+      : AstNode(location), identifier(name), parameters(params),
+        returnType(returnType), body(bod), specifications(spec) {}
+  Identifier identifier;
+  const std::vector<Param> parameters;
+  const std::optional<TypeName> returnType;
+  const FunctionSpecifications specifications;
+  const Block body;
+};
+
+struct Root : public AstNode {
+  inline Root(const core::SourceLocation &location) : AstNode(location) {}
+  std::vector<Function> functions;
+};
+
+} // namespace blaze::frontend
