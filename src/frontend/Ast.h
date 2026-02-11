@@ -47,10 +47,8 @@ struct BoolExpr;
 struct Expression;
 typedef std::shared_ptr<Expression> ExprPtr;
 
+struct Statement;
 typedef std::shared_ptr<Block> BlockPtr;
-typedef std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt, ExprPtr, BlockPtr,
-                     AssignmentStmt>
-    Statement;
 typedef std::shared_ptr<Statement> StmtPtr;
 
 struct Identifier {
@@ -70,7 +68,18 @@ struct Param {
 
 // ---- Expression types ----
 
-enum BinaryOperation { Addition, Subtraction, Multiplication, Division };
+enum BinaryOperation {
+  Addition,
+  Subtraction,
+  Multiplication,
+  Division,
+  LessThan,
+  LessEqual,
+  GreaterThan,
+  GreaterEqual,
+  Equal,
+  NotEqual
+};
 
 struct BinaryExpr {
   inline BinaryExpr(const BinaryOperation &op, const ExprPtr &lhs,
@@ -191,6 +200,20 @@ struct AssignmentStmt : public AstNode {
   ExprPtr value;
 };
 
+struct Statement : public std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt,
+                                       ExprPtr, BlockPtr, AssignmentStmt> {
+  using Variant = std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt, ExprPtr,
+                               BlockPtr, AssignmentStmt>;
+
+  template <typename T, typename = std::enable_if_t<
+                            !std::is_same_v<std::decay_t<T>, Statement> &&
+                            std::is_constructible_v<Variant, T &&>>>
+  Statement(const core::SourceLocation &loc, T &&val)
+      : Variant(std::forward<T>(val)), location(loc) {}
+
+  const core::SourceLocation location;
+};
+
 // ---- Block, Function, Root ----
 
 struct Block : public AstNode {
@@ -200,6 +223,8 @@ struct Block : public AstNode {
 
 struct FunctionSpecifications {
   std::vector<ExprPtr> pre, post;
+  /// The identifier introduced by `post(r) { ... }`, bound to the return value.
+  std::optional<Identifier> postResultBinding;
 };
 
 struct Function : public AstNode {
@@ -209,6 +234,9 @@ struct Function : public AstNode {
                   const FunctionSpecifications &spec)
       : AstNode(location), identifier(name), parameters(params),
         returnType(returnType), body(bod), specifications(spec) {}
+
+  bool returnsVoid() const;
+
   Identifier identifier;
   const std::vector<Param> parameters;
   const std::optional<TypeName> returnType;

@@ -36,7 +36,8 @@ private:
   void resolveBlock(const Block &block);
   void resolveStatement(const Statement &statement);
   void resolveExpr(const ExprPtr &expr);
-  void resolveFunctionSpecs(const FunctionSpecifications &spec);
+  void resolveFunctionSpecs(const FunctionSpecifications &spec,
+                            std::optional<SymbolId> returnTypeId);
   std::optional<SymbolId> resolveCallExpr(const CallExpr &call,
                                           const core::SourceLocation &location);
   std::optional<SymbolId> resolveExprType(const ExprPtr &expr);

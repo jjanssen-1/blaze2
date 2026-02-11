@@ -14,6 +14,12 @@ MINUS: '-';
 STAR: '*';
 SLASH: '/';
 NOT: '!';
+LT: '<';
+LE: '<=';
+GT: '>';
+GE: '>=';
+EQ_EQ: '==';
+NEQ: '!=';
 TRUE: 'true';
 FALSE: 'false';
 
@@ -65,7 +71,11 @@ exprStmt
   ;
 
 expr
-  : addExpr
+  : compExpr
+  ;
+
+compExpr
+  : addExpr ((LT | LE | GT | GE | EQ_EQ | NEQ) addExpr)?
   ;
 
 addExpr
@@ -110,7 +120,7 @@ param
 
 fnSpec
   : PRE '{' exprStmt* '}'
-  | POST '{' exprStmt* '}'
+  | POST '{' ( Identifier ':')? exprStmt* '}'
   ;
 
 Integer

@@ -15,6 +15,7 @@ add_executable(example_tests
  ast_parse_tests.cpp
  resolver_driver_tests.cpp
  type_checker_tests.cpp
+ ir_lower_tests.cpp
 )
 target_link_libraries(example_tests PRIVATE GTest::gtest_main frontend)
 target_include_directories(example_tests PRIVATE

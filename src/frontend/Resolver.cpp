@@ -53,10 +53,6 @@ void Resolver::resolveFunction(const Function &function) {
     hasTypeErrors = true;
   }
 
-  // Resolve function specifications
-  resolveFunctionSpecs(function.specifications);
-
-  // Resolve parameters
   for (const auto &param : function.parameters) {
     const auto typeId = resolveTypeSymbol(param.type, function.location);
     if (!typeId.has_value()) {
@@ -103,6 +99,25 @@ void Resolver::resolveFunction(const Function &function) {
           SymbolKind::Function, function.identifier, function.location, info);
       function.identifier.symbolId = fnId;
     }
+  }
+
+  // Resolve function specifications now that parameters and the function
+  // itself are in scope.
+  resolveFunctionSpecs(function.specifications, returnTypeId);
+
+  // Populate contract and parameter-symbol data on the FunctionInfo so
+  // that call-site lowering can access them via the symbol table.
+  if (function.identifier.symbolId.has_value()) {
+    auto &sym = m_symbols.get(*function.identifier.symbolId);
+    auto &finfo = std::get<FunctionInfo>(sym.info);
+    for (const auto &param : function.parameters) {
+      if (param.identifier.symbolId.has_value()) {
+        finfo.parameterSymbols.push_back(*param.identifier.symbolId);
+      }
+    }
+    finfo.pre = function.specifications.pre;
+    finfo.post = function.specifications.post;
+    finfo.postResultBinding = function.specifications.postResultBinding;
   }
 
   resolveBlock(function.body);
@@ -324,7 +339,21 @@ std::optional<SymbolId> Resolver::resolveExprType(const ExprPtr &expr) {
   }
   if (std::holds_alternative<BinaryExpr>(*expr)) {
     const auto &binaryExpr = std::get<BinaryExpr>(*expr);
-    return resolveExprType(binaryExpr.left);
+    // Comparison operations produce a boolean result.
+    switch (binaryExpr.operation) {
+    case BinaryOperation::LessThan:
+    case BinaryOperation::LessEqual:
+    case BinaryOperation::GreaterThan:
+    case BinaryOperation::GreaterEqual:
+    case BinaryOperation::Equal:
+    case BinaryOperation::NotEqual:
+      if (const auto *builtin = m_builtins.findType("bool")) {
+        return builtin->symbolId;
+      }
+      return std::nullopt;
+    default:
+      return resolveExprType(binaryExpr.left);
+    }
   }
 
   return std::nullopt;
@@ -428,13 +457,51 @@ void Resolver::reportAmbiguousOverload(const Identifier &identifier,
                             "Ambiguous overload: " + identifier.name, location);
 }
 
-void Resolver::resolveFunctionSpecs(const FunctionSpecifications &spec) {
+void Resolver::resolveFunctionSpecs(const FunctionSpecifications &spec,
+                                    std::optional<SymbolId> returnTypeId) {
+  // Preconditions — only reference parameters, no result binding.
   for (const auto &expr : spec.pre) {
     resolveExpr(expr);
   }
 
+  // If a result binding is present (e.g. `post(r) { ... }`), introduce
+  // a const variable symbol for it, scoped only to the postconditions.
+  bool pushedResultScope = false;
+  if (spec.postResultBinding.has_value()) {
+    if (!returnTypeId.has_value()) {
+      // Return type failed to resolve — skip the binding but still
+      // resolve the postcondition expressions for further diagnostics.
+    } else {
+      // Check that the function does not return void.
+      const auto *voidEntry = m_builtins.findType("void");
+      if (voidEntry && returnTypeId.value() == voidEntry->symbolId) {
+        m_diagnostics.reportError(core::ERROR_RESULT_BINDING_ON_VOID,
+                                  "Result binding '" +
+                                      spec.postResultBinding->name +
+                                      "' cannot be used on a void function",
+                                  core::SourceLocation::empty());
+      } else {
+        // Push a temporary scope so the result binding is only visible
+        // to postcondition expressions, not the function body.
+        pushScope();
+        pushedResultScope = true;
+
+        VariableInfo info{returnTypeId.value(), /*isConstant=*/true};
+        const auto resultId =
+            m_symbols.addSymbol(SymbolKind::Variable, *spec.postResultBinding,
+                                core::SourceLocation::empty(), info);
+        spec.postResultBinding->symbolId = resultId;
+        setScopedSymbol(*spec.postResultBinding, resultId);
+      }
+    }
+  }
+
   for (const auto &expr : spec.post) {
     resolveExpr(expr);
+  }
+
+  if (pushedResultScope) {
+    popScope();
   }
 }
 } // namespace blaze::frontend

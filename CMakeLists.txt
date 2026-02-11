@@ -27,6 +27,8 @@ include(CTest)
 enable_testing()
 
 include(FetchContent)
+# Libraries
+
 set(EXPECTED_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(EXPECTED_BUILD_PACKAGE OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
@@ -35,6 +37,14 @@ FetchContent_Declare(
   GIT_TAG v1.1.0
 )
 FetchContent_MakeAvailable(expected)
+
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG        10.2.1  # Use a specific release tag
+)
+
+FetchContent_MakeAvailable(fmt)
 
 # ANTLR4 versions and download information
 set(ANTLR4_TAG 4.13.2)

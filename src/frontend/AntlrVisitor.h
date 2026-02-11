@@ -27,6 +27,7 @@ public:
   visitAssignmentStmt(BlazeParser::AssignmentStmtContext *ctx) override;
   virtual std::any visitExprStmt(BlazeParser::ExprStmtContext *ctx) override;
   virtual std::any visitExpr(BlazeParser::ExprContext *ctx) override;
+  virtual std::any visitCompExpr(BlazeParser::CompExprContext *ctx) override;
   virtual std::any visitAddExpr(BlazeParser::AddExprContext *ctx) override;
   virtual std::any visitMulExpr(BlazeParser::MulExprContext *ctx) override;
   virtual std::any visitUnaryExpr(BlazeParser::UnaryExprContext *ctx) override;

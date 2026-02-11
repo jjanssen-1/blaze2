@@ -3,12 +3,14 @@ antlr_target(BlazeGrammar ${CMAKE_CURRENT_SOURCE_DIR}/Blaze.g4
 )
 
 add_library(frontend STATIC
+ Ast.cpp
  FrontendDriver.cpp
  Resolver.cpp
  Builtins.cpp
  AntlrVisitor.cpp
  SymbolTable.cpp
  TypeChecker.cpp
+ IrLower.cpp
  ${ANTLR_BlazeGrammar_CXX_OUTPUTS}
 )
 

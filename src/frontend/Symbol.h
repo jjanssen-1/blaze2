@@ -25,6 +25,9 @@ struct ParameterInfo {
 struct FunctionInfo {
   SymbolId returnType;
   std::vector<SymbolId> parameterTypes;
+  std::vector<SymbolId> parameterSymbols;
+  std::vector<ExprPtr> pre, post;
+  std::optional<Identifier> postResultBinding;
 };
 
 struct TypeInfo {

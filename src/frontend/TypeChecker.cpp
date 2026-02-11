@@ -15,13 +15,24 @@ bool TypeChecker::expectType(const SymbolId &expected, const SymbolId &actual) {
   return expected == actual;
 }
 
-void TypeChecker::checkFunctionSpecs(const FunctionSpecifications &spec) {
+void TypeChecker::checkFunctionSpecs(const FunctionSpecifications &spec,
+                                     bool isVoidFunction) {
   SymbolId boolType = m_builtins.findType("bool")->symbolId;
   for (const auto &expr : spec.pre) {
     auto type = getExprType(expr);
     if (type.has_value() && type.value() != boolType) {
       reportTypeMismatch(boolType, type.value(), expr->location);
     }
+  }
+
+  // Diagnose result binding on void functions.
+  if (spec.postResultBinding.has_value() && isVoidFunction) {
+    m_error = true;
+    m_diagnostics.reportError(core::ERROR_RESULT_BINDING_ON_VOID,
+                              "Result binding '" +
+                                  spec.postResultBinding->name +
+                                  "' cannot be used on a void function",
+                              core::SourceLocation::empty());
   }
 
   for (const auto &expr : spec.post) {
@@ -33,14 +44,15 @@ void TypeChecker::checkFunctionSpecs(const FunctionSpecifications &spec) {
 }
 
 void TypeChecker::checkFunction(const Function &function) {
-  checkFunctionSpecs(function.specifications);
+  checkFunctionSpecs(function.specifications, function.returnsVoid());
 
   // Set the current return type so return statements can be checked against it.
-  if (function.returnType.has_value() &&
+  if (!function.returnsVoid() &&
       function.returnType->identifier.symbolId.has_value()) {
     m_currentReturnType = function.returnType->identifier.symbolId;
   } else {
-    // Functions without an explicit return type default to void.
+    // Implicit void, explicit void, or unresolved return type — default to
+    // void.
     const auto *voidEntry = m_builtins.findType("void");
     m_currentReturnType =
         voidEntry ? std::optional<SymbolId>(voidEntry->symbolId) : std::nullopt;
@@ -84,6 +96,9 @@ void TypeChecker::checkStatement(const Statement &stmt) {
       return;
     }
 
+    // Recursively check the return expression for sub-expression errors.
+    checkExpression(retStmt.expression.value());
+
     // Expression is present — its type must match the function's return type.
     auto type = getExprType(retStmt.expression.value());
     if (type.has_value() && !expectType(*m_currentReturnType, type.value())) {
@@ -91,6 +106,9 @@ void TypeChecker::checkStatement(const Statement &stmt) {
     }
   } else if (std::holds_alternative<IfStmt>(stmt)) {
     const IfStmt &statement = std::get<IfStmt>(stmt);
+    // Recursively check the condition for sub-expression errors.
+    checkExpression(statement.condition);
+
     // Check if the condition is a boolean expression
     auto conditionType = getExprType(statement.condition);
     if (!conditionType.has_value() || !isBoolean(*conditionType)) {
@@ -107,6 +125,9 @@ void TypeChecker::checkStatement(const Statement &stmt) {
     }
   } else if (std::holds_alternative<WhileStmt>(stmt)) {
     const WhileStmt &statement = std::get<WhileStmt>(stmt);
+    // Recursively check the condition for sub-expression errors.
+    checkExpression(statement.condition);
+
     // Check if the condition is a boolean expression
     auto conditionType = getExprType(statement.condition);
 
@@ -246,4 +267,14 @@ std::string_view TypeChecker::typeName(const SymbolId &type) const {
   return name.empty() ? "<unknown>" : name;
 }
 
+bool TypeChecker::checkProgram(const std::shared_ptr<Root> &root) {
+  if (!root) {
+    return false;
+  }
+
+  for (auto &function : root->functions) {
+    checkFunction(function);
+  }
+  return m_error;
+}
 } // namespace blaze::frontend

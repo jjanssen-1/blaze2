@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "core/Errors.h"
 #include "core/Source.h"
 #include "frontend/FrontendDriver.h"
 
@@ -236,6 +237,242 @@ TEST(TypeChecker, RejectsAssignmentTypeMismatch) {
     }
   }
   EXPECT_TRUE(foundMismatch);
+}
+
+// ---------------------------------------------------------------------------
+// Pre/post specification type checking
+// ---------------------------------------------------------------------------
+
+TEST(TypeChecker, AcceptsPreWithBoolExpression) {
+  auto [ok, diag] = check("fn foo(a: bool) -> i32 pre { a; } { return 0; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsPreWithNonBoolExpression) {
+  auto [ok, diag] = check("fn foo(a: i32) -> i32 pre { a; } { return 0; }");
+  EXPECT_FALSE(ok);
+  EXPECT_FALSE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsPostWithBoolExpression) {
+  auto [ok, diag] = check("fn foo(a: bool) -> i32 post { a; } { return 0; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsPostWithNonBoolExpression) {
+  auto [ok, diag] = check("fn foo(a: i32) -> i32 post { a; } { return 0; }");
+  EXPECT_FALSE(ok);
+  EXPECT_FALSE(diag.empty());
+}
+
+// ---------------------------------------------------------------------------
+// Post result binding — post(r) { ... }
+// ---------------------------------------------------------------------------
+
+TEST(TypeChecker, AcceptsPostResultBindingWithBoolExpr) {
+  // post(r) where r is i32; the expression must still be bool.
+  // Here we use a boolean literal that references r for side effect.
+  auto [ok, diag] = check("fn foo(a: bool) -> i32 post {r: a; } { return 0; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsPostResultBindingNonBoolExpr) {
+  // r is i32, using r directly as the postcondition should fail
+  // because r is not bool.
+  auto [ok, diag] = check("fn foo(a: i32) -> i32 post {r: r; } { return a; }");
+  EXPECT_FALSE(ok);
+  bool foundMismatch = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_TYPE_MISMATCH) {
+      foundMismatch = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundMismatch);
+}
+
+TEST(TypeChecker, AcceptsPostResultBindingBoolReturn) {
+  // Function returns bool, so r is bool — using r directly is valid.
+  auto [ok, diag] =
+      check("fn foo(a: bool) -> bool post {r: r; } { return a; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsPostResultBindingOnVoidFunction) {
+  auto [ok, diag] = check("fn foo(a: bool) post {r: a; } { a; }");
+  EXPECT_FALSE(ok);
+  bool foundError = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_RESULT_BINDING_ON_VOID) {
+      foundError = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundError);
+}
+
+TEST(TypeChecker, AcceptsPostWithoutResultBinding) {
+  // Plain post { ... } on a non-void function — no result binding, should work.
+  auto [ok, diag] = check("fn foo(a: bool) -> i32 post { a; } { return 0; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsPreAndPostResultBindingTogether) {
+  auto [ok, diag] = check("fn foo(a: bool) -> bool "
+                          "pre { a; } "
+                          "post {r: r; } "
+                          "{ return a; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+// ---------------------------------------------------------------------------
+// Comparison operators
+// ---------------------------------------------------------------------------
+
+TEST(TypeChecker, AcceptsLessThanSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a < b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsLessEqualSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a <= b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsGreaterThanSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a > b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsGreaterEqualSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a >= b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsEqualSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a == b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsNotEqualSameTypes) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool { return a != b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsBoolEqualityComparison) {
+  auto [ok, diag] =
+      check("fn foo(a: bool, b: bool) -> bool { return a == b; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsComparisonMixedTypes) {
+  // Comparing i32 with bool should be a type mismatch.
+  auto [ok, diag] = check("fn foo(a: i32, b: bool) -> bool { return a < b; }");
+  EXPECT_FALSE(ok);
+  bool foundMismatch = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_TYPE_MISMATCH) {
+      foundMismatch = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundMismatch);
+}
+
+TEST(TypeChecker, RejectsComparisonResultAsI32) {
+  // A comparison produces bool; assigning it to i32 should fail.
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> i32 { return a < b; }");
+  EXPECT_FALSE(ok);
+  bool foundMismatch = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_TYPE_MISMATCH) {
+      foundMismatch = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundMismatch);
+}
+
+TEST(TypeChecker, AcceptsComparisonAsIfCondition) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> i32 {"
+                          "  if (a < b) { return a; }"
+                          "  return b;"
+                          "}");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsComparisonAsWhileCondition) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> i32 {"
+                          "  while (a < b) { return a; }"
+                          "  return b;"
+                          "}");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsComparisonInPrecondition) {
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> i32 "
+                          "pre { a < b; } "
+                          "{ return a; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsComparisonInPostconditionWithResultBinding) {
+  auto [ok, diag] = check("fn foo(a: i32) -> i32 "
+                          "post {r: r >= a; } "
+                          "{ return a; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, AcceptsComparisonDeclBool) {
+  // Storing a comparison result in a bool variable.
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> bool {"
+                          "  var result: bool = a == b;"
+                          "  return result;"
+                          "}");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsComparisonDeclI32) {
+  // Storing a comparison result in an i32 variable should fail.
+  auto [ok, diag] = check("fn foo(a: i32, b: i32) -> i32 {"
+                          "  var result: i32 = a == b;"
+                          "  return result;"
+                          "}");
+  EXPECT_FALSE(ok);
+  bool foundMismatch = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_TYPE_MISMATCH) {
+      foundMismatch = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundMismatch);
+}
+
+TEST(TypeChecker, AcceptsComparisonWithArithmeticOperands) {
+  // Arithmetic sub-expressions fed into a comparison.
+  auto [ok, diag] =
+      check("fn foo(a: i32, b: i32) -> bool { return a + 1 <= b * 2; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
 }
 
 } // namespace blaze::frontend::tests

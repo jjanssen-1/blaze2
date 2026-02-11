@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "core/Errors.h"
 #include "core/Source.h"
 #include "frontend/FrontendDriver.h"
 
@@ -61,6 +62,8 @@ TEST(AstParsing, CoversAllNodes) {
 
   ASSERT_EQ(fn.specifications.pre.size(), 1u);
   ASSERT_EQ(fn.specifications.post.size(), 1u);
+  // No result binding in `post { b; }`
+  EXPECT_FALSE(fn.specifications.postResultBinding.has_value());
 
   const auto &body = fn.body;
   ASSERT_GE(body.statements.size(), 6u);
@@ -206,6 +209,204 @@ TEST(AstParsing, ReturnStmtUnaryExpr) {
   const auto *expr = getExpr(retStmt.expression.value());
   ASSERT_TRUE(expr);
   EXPECT_TRUE(std::holds_alternative<UnaryExpr>(*expr));
+}
+
+// ---------------------------------------------------------------------------
+// Post result binding: post(r) { ... }
+// ---------------------------------------------------------------------------
+
+TEST(AstParsing, PostResultBindingParsed) {
+  auto [root, source] = parse("fn foo(a: int) -> int "
+                              "post { r : r; } "
+                              "{ return a; }");
+  ASSERT_TRUE(root);
+  ASSERT_EQ(root->functions.size(), 1u);
+
+  const auto &fn = root->functions.front();
+  ASSERT_EQ(fn.specifications.post.size(), 1u);
+  ASSERT_TRUE(fn.specifications.postResultBinding.has_value());
+  EXPECT_EQ(fn.specifications.postResultBinding->name, "r");
+}
+
+TEST(AstParsing, PostWithoutResultBinding) {
+  auto [root, source] = parse("fn foo(a: int) -> int "
+                              "post { a; } "
+                              "{ return a; }");
+  ASSERT_TRUE(root);
+  ASSERT_EQ(root->functions.size(), 1u);
+
+  const auto &fn = root->functions.front();
+  ASSERT_EQ(fn.specifications.post.size(), 1u);
+  EXPECT_FALSE(fn.specifications.postResultBinding.has_value());
+}
+
+TEST(AstParsing, PostResultBindingCustomName) {
+  auto [root, source] = parse("fn foo(x: int) -> int "
+                              "post { result : result; } "
+                              "{ return x; }");
+  ASSERT_TRUE(root);
+  ASSERT_EQ(root->functions.size(), 1u);
+
+  const auto &fn = root->functions.front();
+  ASSERT_TRUE(fn.specifications.postResultBinding.has_value());
+  EXPECT_EQ(fn.specifications.postResultBinding->name, "result");
+}
+
+TEST(AstParsing, PreAndPostWithResultBinding) {
+  auto [root, source] = parse("fn foo(a: int) -> int "
+                              "pre { a; } "
+                              "post { r : r; } "
+                              "{ return a; }");
+  ASSERT_TRUE(root);
+  ASSERT_EQ(root->functions.size(), 1u);
+
+  const auto &fn = root->functions.front();
+  ASSERT_EQ(fn.specifications.pre.size(), 1u);
+  ASSERT_EQ(fn.specifications.post.size(), 1u);
+  ASSERT_TRUE(fn.specifications.postResultBinding.has_value());
+  EXPECT_EQ(fn.specifications.postResultBinding->name, "r");
+}
+
+TEST(AstParsing, PostResultBindingMultipleExprs) {
+  auto [root, source] = parse("fn foo(a: int, b: int) -> int "
+                              "post { r : r; a; } "
+                              "{ return a; }");
+  ASSERT_TRUE(root);
+  ASSERT_EQ(root->functions.size(), 1u);
+
+  const auto &fn = root->functions.front();
+  ASSERT_EQ(fn.specifications.post.size(), 2u);
+  ASSERT_TRUE(fn.specifications.postResultBinding.has_value());
+  EXPECT_EQ(fn.specifications.postResultBinding->name, "r");
+}
+
+// ---------------------------------------------------------------------------
+// Comparison expressions
+// ---------------------------------------------------------------------------
+
+TEST(AstParsing, CompExprLessThan) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a < b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  ASSERT_TRUE(retStmt.expression.has_value());
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation, BinaryOperation::LessThan);
+}
+
+TEST(AstParsing, CompExprLessEqual) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a <= b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation, BinaryOperation::LessEqual);
+}
+
+TEST(AstParsing, CompExprGreaterThan) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a > b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation,
+            BinaryOperation::GreaterThan);
+}
+
+TEST(AstParsing, CompExprGreaterEqual) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a >= b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation,
+            BinaryOperation::GreaterEqual);
+}
+
+TEST(AstParsing, CompExprEqual) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a == b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation, BinaryOperation::Equal);
+}
+
+TEST(AstParsing, CompExprNotEqual) {
+  auto [root, source] =
+      parse("fn foo(a: i32, b: i32) -> bool { return a != b; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation, BinaryOperation::NotEqual);
+}
+
+TEST(AstParsing, CompExprPrecedenceBelowAddition) {
+  // 1 + 2 < 3 + 4 should parse as (1 + 2) < (3 + 4)
+  auto [root, source] = parse("fn foo() -> bool { return 1 + 2 < 3 + 4; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+
+  const auto &cmp = std::get<BinaryExpr>(*expr);
+  EXPECT_EQ(cmp.operation, BinaryOperation::LessThan);
+  // Both children should be addition expressions
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*cmp.left));
+  EXPECT_EQ(std::get<BinaryExpr>(*cmp.left).operation,
+            BinaryOperation::Addition);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*cmp.right));
+  EXPECT_EQ(std::get<BinaryExpr>(*cmp.right).operation,
+            BinaryOperation::Addition);
+}
+
+TEST(AstParsing, CompExprWithoutOperatorIsPassthrough) {
+  // A plain additive expression with no comparison operator should
+  // pass through compExpr unchanged.
+  auto [root, source] = parse("fn foo() -> i32 { return 1 + 2; }");
+  ASSERT_TRUE(root);
+
+  const auto &body = root->functions.front().body;
+  ASSERT_TRUE(std::holds_alternative<ReturnStmt>(body.statements[0]));
+  const auto &retStmt = std::get<ReturnStmt>(body.statements[0]);
+  const auto *expr = getExpr(retStmt.expression.value());
+  ASSERT_TRUE(expr);
+  ASSERT_TRUE(std::holds_alternative<BinaryExpr>(*expr));
+  EXPECT_EQ(std::get<BinaryExpr>(*expr).operation, BinaryOperation::Addition);
 }
 
 } // namespace blaze::frontend::tests

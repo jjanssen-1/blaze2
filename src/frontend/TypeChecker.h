@@ -16,16 +16,7 @@ public:
                        core::DiagnosticList &diagnostics)
       : m_table(table), m_builtins(builtins), m_diagnostics(diagnostics) {}
 
-  bool checkProgram(const std::shared_ptr<Root> &root) {
-    if (!root) {
-      return false;
-    }
-
-    for (auto &function : root->functions) {
-      checkFunction(function);
-    }
-    return m_error;
-  }
+  bool checkProgram(const std::shared_ptr<Root> &root);
 
 private:
   std::optional<SymbolId> m_currentReturnType;
@@ -41,7 +32,8 @@ private:
   void checkDeclaration(const DeclStmt &decl);
   void checkAssignment(const AssignmentStmt &assignment);
   void checkExpression(const ExprPtr &expr);
-  void checkFunctionSpecs(const FunctionSpecifications &spec);
+  void checkFunctionSpecs(const FunctionSpecifications &spec,
+                          bool isVoidFunction);
   void reportTypeMismatch(const SymbolId &expected, const SymbolId &actual,
                           const core::SourceLocation &location);
   bool isVoid(const SymbolId &type);

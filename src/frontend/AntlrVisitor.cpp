@@ -64,24 +64,26 @@ std::any BlazeVisitorImpl::visitBlock(BlazeParser::BlockContext *ctx) {
   return output;
 }
 std::any BlazeVisitorImpl::visitStmt(BlazeParser::StmtContext *ctx) {
+  auto loc = sourceLocation(ctx, *m_source);
   if (ctx->declStmt()) {
-    return Statement(std::any_cast<DeclStmt>(ctx->declStmt()->accept(this)));
+    return Statement(loc,
+                     std::any_cast<DeclStmt>(ctx->declStmt()->accept(this)));
   } else if (ctx->returnStmt()) {
     return Statement(
-        std::any_cast<ReturnStmt>(ctx->returnStmt()->accept(this)));
+        loc, std::any_cast<ReturnStmt>(ctx->returnStmt()->accept(this)));
   } else if (ctx->ifStmt()) {
-    return Statement(std::any_cast<IfStmt>(ctx->ifStmt()->accept(this)));
-
+    return Statement(loc, std::any_cast<IfStmt>(ctx->ifStmt()->accept(this)));
   } else if (ctx->whileStmt()) {
-    return Statement(std::any_cast<WhileStmt>(ctx->whileStmt()->accept(this)));
+    return Statement(loc,
+                     std::any_cast<WhileStmt>(ctx->whileStmt()->accept(this)));
   } else if (ctx->exprStmt()) {
     return std::any_cast<Statement>(ctx->exprStmt()->accept(this));
   } else if (ctx->block()) {
-    return Statement(std::make_shared<Block>(
-        std::any_cast<Block>(ctx->block()->accept(this))));
+    return Statement(loc, std::make_shared<Block>(std::any_cast<Block>(
+                              ctx->block()->accept(this))));
   } else if (ctx->assignmentStmt()) {
-    return Statement(
-        std::any_cast<AssignmentStmt>(ctx->assignmentStmt()->accept(this)));
+    return Statement(loc, std::any_cast<AssignmentStmt>(
+                              ctx->assignmentStmt()->accept(this)));
   } else {
     // Internal error
     return std::nullopt;
@@ -115,19 +117,23 @@ BlazeVisitorImpl::visitReturnStmt(BlazeParser::ReturnStmtContext *ctx) {
 std::any BlazeVisitorImpl::visitIfStmt(BlazeParser::IfStmtContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
   const ExprPtr condition = std::any_cast<ExprPtr>(ctx->expr()->accept(this));
-  const StmtPtr consequent =
-      std::make_shared<Statement>(std::make_shared<Block>(
-          std::any_cast<Block>(ctx->block(0)->accept(this))));
+  auto consequentBlock = std::make_shared<Block>(
+      std::any_cast<Block>(ctx->block(0)->accept(this)));
+  const StmtPtr consequent = std::make_shared<Statement>(
+      consequentBlock->location, BlockPtr(consequentBlock));
   std::optional<StmtPtr> alternative;
   if (ctx->ELSE()) {
     if (ctx->ifStmt()) {
       // else if
-      alternative = std::make_shared<Statement>(
-          std::any_cast<IfStmt>(ctx->ifStmt()->accept(this)));
+      auto elseIf = std::any_cast<IfStmt>(ctx->ifStmt()->accept(this));
+      alternative =
+          std::make_shared<Statement>(elseIf.location, std::move(elseIf));
     } else {
       // simple else
-      alternative = std::make_shared<Statement>(std::make_shared<Block>(
-          std::any_cast<Block>(ctx->block(1)->accept(this))));
+      auto elseBlock = std::make_shared<Block>(
+          std::any_cast<Block>(ctx->block(1)->accept(this)));
+      alternative =
+          std::make_shared<Statement>(elseBlock->location, BlockPtr(elseBlock));
     }
   }
 
@@ -139,8 +145,10 @@ std::any BlazeVisitorImpl::visitWhileStmt(BlazeParser::WhileStmtContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
   const ExprPtr condition = std::any_cast<ExprPtr>(ctx->expr()->accept(this));
 
-  const StmtPtr body = std::make_shared<Statement>(std::make_shared<Block>(
-      std::any_cast<Block>(ctx->block()->accept(this))));
+  auto bodyBlock =
+      std::make_shared<Block>(std::any_cast<Block>(ctx->block()->accept(this)));
+  const StmtPtr body =
+      std::make_shared<Statement>(bodyBlock->location, BlockPtr(bodyBlock));
 
   WhileStmt output(loc, condition, body);
   return output;
@@ -156,10 +164,38 @@ BlazeVisitorImpl::visitAssignmentStmt(BlazeParser::AssignmentStmtContext *ctx) {
   return output;
 }
 std::any BlazeVisitorImpl::visitExprStmt(BlazeParser::ExprStmtContext *ctx) {
-  return Statement(std::any_cast<ExprPtr>(ctx->expr()->accept(this)));
+  auto loc = sourceLocation(ctx, *m_source);
+  return Statement(loc, std::any_cast<ExprPtr>(ctx->expr()->accept(this)));
 }
 std::any BlazeVisitorImpl::visitExpr(BlazeParser::ExprContext *ctx) {
-  return ctx->addExpr()->accept(this);
+  return ctx->compExpr()->accept(this);
+}
+
+std::any BlazeVisitorImpl::visitCompExpr(BlazeParser::CompExprContext *ctx) {
+  auto loc = sourceLocation(ctx, *m_source);
+
+  auto current = std::any_cast<ExprPtr>(ctx->addExpr(0)->accept(this));
+  if (ctx->addExpr().size() > 1) {
+    auto rhs = std::any_cast<ExprPtr>(ctx->addExpr(1)->accept(this));
+    BinaryOperation op;
+    if (ctx->LT()) {
+      op = BinaryOperation::LessThan;
+    } else if (ctx->LE()) {
+      op = BinaryOperation::LessEqual;
+    } else if (ctx->GT()) {
+      op = BinaryOperation::GreaterThan;
+    } else if (ctx->GE()) {
+      op = BinaryOperation::GreaterEqual;
+    } else if (ctx->EQ_EQ()) {
+      op = BinaryOperation::Equal;
+    } else {
+      op = BinaryOperation::NotEqual;
+    }
+    BinaryExpr expr(op, current, rhs);
+    current = std::make_shared<Expression>(loc, expr);
+  }
+
+  return current;
 }
 std::any BlazeVisitorImpl::visitAddExpr(BlazeParser::AddExprContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
@@ -274,6 +310,7 @@ BlazeVisitorImpl::visitFunctionDecl(BlazeParser::FunctionDeclContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
   Block body = std::any_cast<Block>(ctx->block()->accept(this));
   std::vector<ExprPtr> preConditions, postConditions;
+  std::optional<Identifier> postResultBinding;
 
   for (const auto &specification : ctx->fnSpec()) {
     std::vector<ExprPtr> *specBody = nullptr;
@@ -281,6 +318,11 @@ BlazeVisitorImpl::visitFunctionDecl(BlazeParser::FunctionDeclContext *ctx) {
       specBody = &preConditions;
     } else if (specification->POST()) {
       specBody = &postConditions;
+      // Capture optional result binding: post(r) { ... }
+      if (specification->Identifier()) {
+        postResultBinding.emplace(
+            Identifier{specification->Identifier()->getText()});
+      }
     } else {
       // TODO: report Internal error.
     }
@@ -316,6 +358,7 @@ BlazeVisitorImpl::visitFunctionDecl(BlazeParser::FunctionDeclContext *ctx) {
   FunctionSpecifications specs;
   specs.pre = std::move(preConditions);
   specs.post = std::move(postConditions);
+  specs.postResultBinding = std::move(postResultBinding);
 
   Function output(loc, identifier, parameters, returnType, body, specs);
   return output;
