@@ -123,6 +123,8 @@ void TypeChecker::checkStatement(const Statement &stmt) {
   } else if (std::holds_alternative<BlockPtr>(stmt)) {
     const BlockPtr &block = std::get<BlockPtr>(stmt);
     checkBlock(*block);
+  } else if (std::holds_alternative<AssignmentStmt>(stmt)) {
+    checkAssignment(std::get<AssignmentStmt>(stmt));
   }
 }
 
@@ -134,6 +136,54 @@ void TypeChecker::checkDeclaration(const DeclStmt &decl) {
   auto exprType = getExprType(decl.assignedExpression);
   if (declType && exprType && !expectType(*declType, *exprType)) {
     reportTypeMismatch(*declType, *exprType, decl.location);
+  }
+}
+
+void TypeChecker::checkAssignment(const AssignmentStmt &assignment) {
+  checkExpression(assignment.value);
+
+  // The identifier must have been resolved by the Resolver.
+  if (!assignment.identifier.symbolId.has_value()) {
+    // Unresolved symbol — the Resolver already reported this error.
+    return;
+  }
+
+  const auto &symbol = m_table.get(*assignment.identifier.symbolId);
+
+  // Check constness: only variables (not parameters) declared with `var` may be
+  // assigned to.
+  if (const auto *varInfo = std::get_if<VariableInfo>(&symbol.info)) {
+    if (varInfo->isConstant) {
+      m_error = true;
+      m_diagnostics.reportError(core::ERROR_ASSIGN_TO_CONST,
+                                "Cannot assign to constant variable '" +
+                                    std::string(symbol.name.name()) + "'",
+                                assignment.location);
+      return;
+    }
+
+    // Check type compatibility between the variable and the assigned
+    // expression.
+    auto exprType = getExprType(assignment.value);
+    if (exprType.has_value() && !expectType(varInfo->type, exprType.value())) {
+      reportTypeMismatch(varInfo->type, exprType.value(), assignment.location);
+    }
+  } else if (std::holds_alternative<ParameterInfo>(symbol.info)) {
+    // Parameters are immutable by default, and currently cannot be reassigned.
+    // This will change in the future to allow mutable parameters.
+    m_error = true;
+    m_diagnostics.reportError(core::ERROR_ASSIGN_TO_CONST,
+                              "Cannot assign to parameter '" +
+                                  std::string(symbol.name.name()) + "'",
+                              assignment.location);
+  } else {
+    // Assigning to a function, type, or other non-variable symbol.
+    m_error = true;
+    m_diagnostics.reportError(core::ERROR_ASSIGN_TO_CONST,
+                              "Cannot assign to '" +
+                                  std::string(symbol.name.name()) +
+                                  "': not a variable",
+                              assignment.location);
   }
 }
 

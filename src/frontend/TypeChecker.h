@@ -39,6 +39,7 @@ private:
   void checkBlock(const Block &block);
   void checkStatement(const Statement &stmt);
   void checkDeclaration(const DeclStmt &decl);
+  void checkAssignment(const AssignmentStmt &assignment);
   void checkExpression(const ExprPtr &expr);
   void checkFunctionSpecs(const FunctionSpecifications &spec);
   void reportTypeMismatch(const SymbolId &expected, const SymbolId &actual,

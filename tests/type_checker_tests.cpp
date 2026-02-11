@@ -183,4 +183,59 @@ TEST(TypeChecker, RejectsNestedReturnMismatch) {
   EXPECT_FALSE(diag.empty());
 }
 
+// ---------------------------------------------------------------------------
+// Assignment checks
+// ---------------------------------------------------------------------------
+
+TEST(TypeChecker, AcceptsValidVarAssignment) {
+  auto [ok, diag] =
+      check("fn foo() -> i32 { var x: i32 = 1; x = 2; return x; }");
+  EXPECT_TRUE(ok);
+  EXPECT_TRUE(diag.empty());
+}
+
+TEST(TypeChecker, RejectsAssignToConst) {
+  auto [ok, diag] =
+      check("fn foo() -> i32 { const x: i32 = 1; x = 2; return x; }");
+  EXPECT_FALSE(ok);
+  ASSERT_FALSE(diag.empty());
+  bool foundConstError = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_ASSIGN_TO_CONST) {
+      foundConstError = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundConstError);
+}
+
+TEST(TypeChecker, RejectsAssignToParameter) {
+  auto [ok, diag] = check("fn foo(x: i32) -> i32 { x = 2; return x; }");
+  EXPECT_FALSE(ok);
+  ASSERT_FALSE(diag.empty());
+  bool foundConstError = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_ASSIGN_TO_CONST) {
+      foundConstError = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundConstError);
+}
+
+TEST(TypeChecker, RejectsAssignmentTypeMismatch) {
+  auto [ok, diag] =
+      check("fn foo() -> i32 { var x: i32 = 1; x = true; return x; }");
+  EXPECT_FALSE(ok);
+  ASSERT_FALSE(diag.empty());
+  bool foundMismatch = false;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_TYPE_MISMATCH) {
+      foundMismatch = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundMismatch);
+}
+
 } // namespace blaze::frontend::tests

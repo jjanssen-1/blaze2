@@ -23,6 +23,8 @@ public:
   visitReturnStmt(BlazeParser::ReturnStmtContext *ctx) override;
   virtual std::any visitIfStmt(BlazeParser::IfStmtContext *ctx) override;
   virtual std::any visitWhileStmt(BlazeParser::WhileStmtContext *ctx) override;
+  virtual std::any
+  visitAssignmentStmt(BlazeParser::AssignmentStmtContext *ctx) override;
   virtual std::any visitExprStmt(BlazeParser::ExprStmtContext *ctx) override;
   virtual std::any visitExpr(BlazeParser::ExprContext *ctx) override;
   virtual std::any visitAddExpr(BlazeParser::AddExprContext *ctx) override;

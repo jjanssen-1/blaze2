@@ -79,6 +79,9 @@ std::any BlazeVisitorImpl::visitStmt(BlazeParser::StmtContext *ctx) {
   } else if (ctx->block()) {
     return Statement(std::make_shared<Block>(
         std::any_cast<Block>(ctx->block()->accept(this))));
+  } else if (ctx->assignmentStmt()) {
+    return Statement(
+        std::any_cast<AssignmentStmt>(ctx->assignmentStmt()->accept(this)));
   } else {
     // Internal error
     return std::nullopt;
@@ -140,6 +143,16 @@ std::any BlazeVisitorImpl::visitWhileStmt(BlazeParser::WhileStmtContext *ctx) {
       std::any_cast<Block>(ctx->block()->accept(this))));
 
   WhileStmt output(loc, condition, body);
+  return output;
+}
+std::any
+BlazeVisitorImpl::visitAssignmentStmt(BlazeParser::AssignmentStmtContext *ctx) {
+  auto loc = sourceLocation(ctx, *m_source);
+  const ExprPtr rhs = std::any_cast<ExprPtr>(ctx->expr()->accept(this));
+
+  auto identNode = ctx->Identifier();
+  Identifier identifier{identNode ? identNode->getText() : std::string{}};
+  AssignmentStmt output(loc, identifier, rhs);
   return output;
 }
 std::any BlazeVisitorImpl::visitExprStmt(BlazeParser::ExprStmtContext *ctx) {

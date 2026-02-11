@@ -1,4 +1,5 @@
 #include "Resolver.h"
+#include "Ast.h"
 
 #include <string>
 #include <variant>
@@ -162,6 +163,20 @@ void Resolver::resolveStatement(const Statement &statement) {
     resolveExpr(std::get<ExprPtr>(statement));
   } else if (std::holds_alternative<BlockPtr>(statement)) {
     resolveBlock(*std::get<BlockPtr>(statement));
+  } else if (std::holds_alternative<AssignmentStmt>(statement)) {
+    const auto &assignmentStmt = std::get<AssignmentStmt>(statement);
+
+    // Resolve the left-hand side identifier.
+    if (const auto scopedId = findScopedSymbol(assignmentStmt.identifier)) {
+      assignmentStmt.identifier.symbolId = scopedId.value();
+    } else {
+      reportUnresolved(assignmentStmt.identifier, assignmentStmt.location);
+    }
+
+    // Resolve the right-hand side expression.
+    // Potentially the lhs will also need expression resolution if an index
+    // operator gets added.
+    resolveExpr(assignmentStmt.value);
   }
 }
 

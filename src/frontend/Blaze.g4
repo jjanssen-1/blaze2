@@ -36,6 +36,7 @@ stmt
   | ifStmt
   | whileStmt
   | exprStmt
+  | assignmentStmt
   | block
   ;
 
@@ -53,6 +54,10 @@ ifStmt
 
 whileStmt
   : WHILE '(' expr ')' block
+  ;
+
+assignmentStmt
+  : Identifier '=' expr ';'
   ;
 
 exprStmt

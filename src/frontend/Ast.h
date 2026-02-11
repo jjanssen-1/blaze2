@@ -32,6 +32,7 @@ struct DeclStmt;
 struct ReturnStmt;
 struct IfStmt;
 struct WhileStmt;
+struct AssignmentStmt;
 
 // Expressions
 struct BinaryExpr;
@@ -47,7 +48,8 @@ struct Expression;
 typedef std::shared_ptr<Expression> ExprPtr;
 
 typedef std::shared_ptr<Block> BlockPtr;
-typedef std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt, ExprPtr, BlockPtr>
+typedef std::variant<DeclStmt, ReturnStmt, IfStmt, WhileStmt, ExprPtr, BlockPtr,
+                     AssignmentStmt>
     Statement;
 typedef std::shared_ptr<Statement> StmtPtr;
 
@@ -179,6 +181,14 @@ struct WhileStmt : public AstNode {
       : AstNode(location), condition(cond), body(bod) {}
   const ExprPtr condition;
   const StmtPtr body;
+};
+
+struct AssignmentStmt : public AstNode {
+  inline AssignmentStmt(const core::SourceLocation &location,
+                        const Identifier &id, const ExprPtr &value)
+      : AstNode(location), identifier(id), value(value) {}
+  Identifier identifier;
+  ExprPtr value;
 };
 
 // ---- Block, Function, Root ----
