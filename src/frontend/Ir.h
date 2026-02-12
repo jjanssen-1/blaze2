@@ -4,6 +4,7 @@
 #include "core/Common.h"
 #include "core/Source.h"
 #include <optional>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -189,6 +190,22 @@ struct IRFunction {
   IRType returnType;
   std::vector<IRParam> parameters;
   std::vector<IRBlock> blocks;
+
+  // Maps each register ID to the source location where it was defined.
+  std::unordered_map<core::u64, core::SourceLocation> registerLocations;
+
+  std::optional<core::SourceLocation>
+  registerLocation(const Register &reg) const {
+    auto it = registerLocations.find(reg.id);
+    if (it != registerLocations.end())
+      return it->second;
+    return std::nullopt;
+  }
+
+  /// Returns true if a source location is recorded for the given register.
+  bool hasRegisterLocation(const Register &reg) const {
+    return registerLocations.find(reg.id) != registerLocations.end();
+  }
 };
 
 } // namespace blaze::frontend

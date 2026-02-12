@@ -39,10 +39,14 @@ void IRBuilder::resetFunctionState() {
   m_currentBlockIdx = 0;
   m_symbolToRegister.clear();
   m_initializedSymbols.clear();
+  m_registerLocations.clear();
 }
 
-Register IRBuilder::allocateRegister(IRType type) {
-  return Register{m_nextRegisterId++, type};
+Register IRBuilder::allocateRegister(IRType type,
+                                     const core::SourceLocation &loc) {
+  Register reg{m_nextRegisterId++, type};
+  m_registerLocations.emplace(reg.id, loc);
+  return reg;
 }
 
 IRType IRBuilder::resolveIRType(const SymbolId &symbolId) {
@@ -131,7 +135,7 @@ IRFunction IRBuilder::lowerFunction(const Function &func) {
     if (param.type.identifier.symbolId.has_value()) {
       paramType = resolveIRType(*param.type.identifier.symbolId);
     }
-    Register reg = allocateRegister(paramType);
+    Register reg = allocateRegister(paramType, func.location);
     irParams.push_back(IRParam{reg, param.identifier.name});
     if (param.identifier.symbolId.has_value()) {
       auto raw = param.identifier.symbolId->raw();
@@ -168,6 +172,7 @@ IRFunction IRBuilder::lowerFunction(const Function &func) {
   irFunc.returnType = irReturnType;
   irFunc.parameters = std::move(irParams);
   irFunc.blocks = std::move(m_blocks);
+  irFunc.registerLocations = std::move(m_registerLocations);
   return irFunc;
 }
 
@@ -206,7 +211,7 @@ void IRBuilder::lowerDeclStmt(const DeclStmt &stmt) {
   if (stmt.type.identifier.symbolId.has_value()) {
     declType = resolveIRType(*stmt.type.identifier.symbolId);
   }
-  Register dest = allocateRegister(declType);
+  Register dest = allocateRegister(declType, stmt.location);
 
   // Always bind the declared symbol to its register, even without
   // an initializer — later references need to find it.
@@ -241,7 +246,7 @@ void IRBuilder::lowerReturnStmt(const ReturnStmt &stmt) {
           retReg = std::get<Register>(value);
         } else {
           // Materialize the constant into a ghost register for the binding.
-          retReg = allocateRegister(irTypeOf(value));
+          retReg = allocateRegister(irTypeOf(value), stmt.location);
           emit(stmt.location, true, AssignmentInstruction{retReg, value});
         }
         auto raw = m_currentSpecs->postResultBinding->symbolId->raw();
@@ -270,7 +275,7 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
     condReg = std::get<Register>(cond);
   } else {
     // Materialise the constant into a register.
-    condReg = allocateRegister(IRType::Bool);
+    condReg = allocateRegister(IRType::Bool, stmt.location);
     emit(stmt.location, AssignmentInstruction{condReg, cond});
   }
 
@@ -364,7 +369,7 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   if (std::holds_alternative<Register>(cond)) {
     condReg = std::get<Register>(cond);
   } else {
-    condReg = allocateRegister(IRType::Bool);
+    condReg = allocateRegister(IRType::Bool, stmt.location);
     emit(stmt.location, AssignmentInstruction{condReg, cond});
   }
 
@@ -399,7 +404,7 @@ void IRBuilder::lowerAssignmentStmt(const AssignmentStmt &stmt) {
     }
   }
 
-  Register dest = allocateRegister(varType);
+  Register dest = allocateRegister(varType, stmt.location);
 
   // Re-bind the symbol to the new register (SSA-style: new definition).
   if (stmt.identifier.symbolId.has_value()) {
@@ -447,7 +452,7 @@ Operand IRBuilder::lowerBinaryExpr(const core::SourceLocation &loc,
   Operand rhs = lowerExpression(expr.right);
 
   IRType resultType = resultTypeOfBinaryOp(expr.operation, irTypeOf(lhs));
-  Register dest = allocateRegister(resultType);
+  Register dest = allocateRegister(resultType, loc);
   emit(loc, BinaryInstruction{expr.operation, dest, lhs, rhs});
   return dest;
 }
@@ -456,7 +461,7 @@ Operand IRBuilder::lowerUnaryExpr(const core::SourceLocation &loc,
                                   const UnaryExpr &expr) {
   Operand src = lowerExpression(expr.operand);
 
-  Register dest = allocateRegister(irTypeOf(src));
+  Register dest = allocateRegister(irTypeOf(src), loc);
   emit(loc, UnaryInstruction{expr.operation, dest, src});
   return dest;
 }
@@ -517,7 +522,7 @@ Operand IRBuilder::lowerCallExpr(const core::SourceLocation &loc,
         argReg = std::get<Register>(args[i]);
       } else {
         // Materialize the constant into a ghost register for the binding.
-        argReg = allocateRegister(irTypeOf(args[i]));
+        argReg = allocateRegister(irTypeOf(args[i]), loc);
         emit(loc, true, AssignmentInstruction{argReg, args[i]});
       }
       m_symbolToRegister[raw] = argReg;
@@ -534,7 +539,7 @@ Operand IRBuilder::lowerCallExpr(const core::SourceLocation &loc,
     callReturnType = resolveIRType(calleeInfo->returnType);
   }
 
-  Register dest = allocateRegister(callReturnType);
+  Register dest = allocateRegister(callReturnType, loc);
   emit(loc, CallInstruction{dest, func, std::move(args)});
 
   // Assume callee postconditions hold after the call.

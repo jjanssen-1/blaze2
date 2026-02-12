@@ -32,6 +32,7 @@ private:
   std::vector<IRBlock> m_blocks;
   core::u64 m_currentBlockIdx;
   std::unordered_map<core::u64, Register> m_symbolToRegister;
+  std::unordered_map<core::u64, core::SourceLocation> m_registerLocations;
 
   // Tracks which symbols (by raw SymbolId) have been definitely assigned
   // a value. Used for use-before-initialization diagnostics.
@@ -42,7 +43,7 @@ private:
   core::DiagnosticList &m_diagnostics;
 
   void resetFunctionState();
-  Register allocateRegister(IRType type);
+  Register allocateRegister(IRType type, const core::SourceLocation &loc);
   IRType resolveIRType(const SymbolId &symbolId);
   IRType resultTypeOfBinaryOp(BinaryOperation op, IRType operandType);
   BlockId createBlock();
