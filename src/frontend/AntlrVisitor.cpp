@@ -1,9 +1,15 @@
 #include "AntlrVisitor.h"
 
+#include "core/Errors.h"
+#include "core/Source.h"
+
 #include "frontend/Ast.h"
 
+#include <charconv>
+#include <fmt/format.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace blaze::frontend {
 
@@ -109,7 +115,10 @@ std::any BlazeVisitorImpl::visitDeclStmt(BlazeParser::DeclStmtContext *ctx) {
 std::any
 BlazeVisitorImpl::visitReturnStmt(BlazeParser::ReturnStmtContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
-  const ExprPtr expression = std::any_cast<ExprPtr>(ctx->expr()->accept(this));
+  std::optional<ExprPtr> expression;
+  if (ctx->expr()) {
+    expression = std::any_cast<ExprPtr>(ctx->expr()->accept(this));
+  }
   ReturnStmt output(loc, expression);
 
   return output;
@@ -274,6 +283,49 @@ std::any BlazeVisitorImpl::visitVarExpr(BlazeParser::VarExprContext *ctx) {
   return std::make_shared<Expression>(loc, output);
 }
 
+core::u64 BlazeVisitorImpl::parseNumber(const std::string &numStr,
+                                        const core::SourceLocation &loc) {
+  int base = 10, offset = 0;
+  if (numStr.size() < 2) {
+    // One digit decimal
+  } else if (numStr[0] == '0' && numStr[1] == 'x') {
+    // 0x -> Hex
+    base = 16;
+    offset = 2;
+  } else if (numStr[0] == '0' && numStr[1] == 'b') {
+    // 0b -> Binary
+    base = 2;
+    offset = 2;
+  } else if (numStr[0] == '0' && numStr[1] == 'b') {
+    // 0o -> Oct
+    base = 8;
+    offset = 2;
+  }
+  std::string cleaned = numStr;
+  std::erase(cleaned, '\'');
+  core::u64 output;
+  auto result = std::from_chars(cleaned.data() + offset,
+                                cleaned.data() + cleaned.size(), output, base);
+
+  if (result.ec == std::errc::invalid_argument) {
+    m_diagnostics.reportError(
+        core::ERROR_WRONG_NUMBER_FORMAT,
+        fmt::format("Number contains invalid character: {0}", numStr), loc);
+    return 0;
+  }
+
+  if (result.ec == std::errc::result_out_of_range) {
+    m_diagnostics.reportError(
+        core::ERROR_WRONG_NUMBER_FORMAT,
+        fmt::format("Number string is too large for a string literal: {0}",
+                    numStr),
+        loc);
+    return 0;
+  }
+
+  return output;
+}
+
 std::any BlazeVisitorImpl::visitIntExpr(BlazeParser::IntExprContext *ctx) {
   auto loc = sourceLocation(ctx, *m_source);
   auto *token = ctx->Integer();
@@ -282,7 +334,7 @@ std::any BlazeVisitorImpl::visitIntExpr(BlazeParser::IntExprContext *ctx) {
     return std::make_shared<Expression>(loc, IntExpr(0));
   }
 
-  const auto value = static_cast<core::u64>(std::stoull(token->getText()));
+  core::u64 value = parseNumber(token->getText(), loc);
   IntExpr output(value);
   return std::make_shared<Expression>(loc, output);
 }

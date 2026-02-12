@@ -1,0 +1,82 @@
+// Arithmetic: all binary operators, operator precedence, nested expressions.
+
+fn add(a: i32, b: i32) -> i32 {
+  return a + b;
+}
+
+fn sub(a: i32, b: i32) -> i32 {
+  return a - b;
+}
+
+fn mul(a: i32, b: i32) -> i32 {
+  return a * b;
+}
+
+fn div(a: i32, b: i32) -> i32 {
+  return a / b;
+}
+
+// Precedence: mul binds tighter than add.
+fn precedence(a: i32, b: i32, c: i32) -> i32 {
+  return a + b * c;
+}
+
+// Explicit parentheses override precedence.
+fn parens(a: i32, b: i32, c: i32) -> i32 {
+  return (a + b) * c;
+}
+
+// Chained additions: left-associative.
+fn chain_add(a: i32, b: i32, c: i32, d: i32) -> i32 {
+  return a + b + c + d;
+}
+
+// Chained multiplications.
+fn chain_mul(a: i32, b: i32, c: i32) -> i32 {
+  return a * b * c;
+}
+
+// Mixed arithmetic with all four operators.
+fn mixed(a: i32, b: i32, c: i32, d: i32) -> i32 {
+  return a + b * c - d / b;
+}
+
+// Deeply nested parenthesized expression.
+fn deep_parens(x: i32) -> i32 {
+  return ((((x + 1) * 2) - 3) / 1);
+}
+
+// Arithmetic with constants only — no parameters used.
+fn const_expr() -> i32 {
+  return 10 + 20 * 3 - 5;
+}
+
+// Store intermediate results in variables.
+fn with_intermediates(a: i32, b: i32) -> i32 {
+  var sum: i32 = a + b;
+  var product: i32 = a * b;
+  var result: i32 = sum + product;
+  return result;
+}
+
+// Reassignment with arithmetic.
+fn accumulate(a: i32, b: i32, c: i32) -> i32 {
+  var acc: i32 = a;
+  acc = acc + b;
+  acc = acc + c;
+  return acc;
+}
+
+// Subtraction can produce "negative" conceptual values.
+fn subtract_larger(a: i32, b: i32) -> i32 {
+  return a - b - a;
+}
+
+// Zero as an operand.
+fn zero_ops(x: i32) -> i32 {
+  var a: i32 = x + 0;
+  var b: i32 = x - 0;
+  var c: i32 = x * 0;
+  var d: i32 = x * 1;
+  return a + b + c + d;
+}

@@ -2,6 +2,7 @@
 
 #include "BlazeBaseVisitor.h"
 
+#include "core/Errors.h"
 #include "core/Source.h"
 #include "frontend/Ast.h"
 
@@ -11,8 +12,9 @@ namespace blaze::frontend {
 
 class BlazeVisitorImpl : public BlazeBaseVisitor {
 public:
-  explicit BlazeVisitorImpl(std::shared_ptr<core::Source> source)
-      : m_source(std::move(source)) {}
+  explicit BlazeVisitorImpl(std::shared_ptr<core::Source> source,
+                            core::DiagnosticList &diagnostics)
+      : m_source(std::move(source)), m_diagnostics(diagnostics) {}
 
   virtual std::any visitProgram(BlazeParser::ProgramContext *ctx) override;
   virtual std::any visitTypeName(BlazeParser::TypeNameContext *ctx) override;
@@ -43,8 +45,11 @@ public:
   virtual std::any visitParam(BlazeParser::ParamContext *ctx) override;
 
 private:
+  core::DiagnosticList &m_diagnostics;
   std::shared_ptr<Root> m_currentRoot;
   std::shared_ptr<core::Source> m_source;
+  core::u64 parseNumber(const std::string &numStr,
+                        const core::SourceLocation &location);
 
 protected:
   static core::SourceLocation

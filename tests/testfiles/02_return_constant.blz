@@ -1,0 +1,4 @@
+// Return a constant value — no parameters, no variables.
+fn answer() -> i32 {
+  return 42;
+}

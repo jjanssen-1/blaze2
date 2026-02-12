@@ -1,0 +1,296 @@
+// Postcondition contracts: various patterns of post { ... } specifications.
+
+// Simple postcondition with result binding.
+fn always_positive(x: i32) -> i32
+  post { r: r > 0; }
+{
+  if (x > 0) {
+    return x;
+  }
+  return 1;
+}
+
+// Postcondition without result binding — references only parameters.
+fn param_only_post(x: i32) -> i32
+  post { x > 0; }
+{
+  return x;
+}
+
+// Postcondition with equality on the result.
+fn returns_input(x: i32) -> i32
+  post { r: r == x; }
+{
+  return x;
+}
+
+// Postcondition with greater-than-or-equal on result.
+fn at_least_zero(x: i32) -> i32
+  post { r: r >= 0; }
+{
+  if (x >= 0) {
+    return x;
+  }
+  return 0;
+}
+
+// Postcondition with less-than on result.
+fn bounded_result(x: i32) -> i32
+  post { r: r < 100; }
+{
+  if (x < 100) {
+    return x;
+  }
+  return 99;
+}
+
+// Postcondition with not-equal on result.
+fn never_zero(x: i32) -> i32
+  post { r: r != 0; }
+{
+  if (x == 0) {
+    return 1;
+  }
+  return x;
+}
+
+// Multiple postconditions in one post block (range constraint on result).
+fn result_in_range(x: i32) -> i32
+  post { r: r > 0; r < 100; }
+{
+  if (x <= 0) {
+    return 1;
+  }
+  if (x >= 100) {
+    return 99;
+  }
+  return x;
+}
+
+// Postcondition with arithmetic on the result.
+fn result_plus_one(x: i32) -> i32
+  post { r: r > x; }
+{
+  return x + 1;
+}
+
+// Postcondition comparing result to a parameter expression.
+fn result_vs_param_expr(a: i32, b: i32) -> i32
+  post { r: r >= a + b; }
+{
+  return a + b;
+}
+
+// Postcondition on a function with no parameters.
+fn constant_post() -> i32
+  post { r: r == 42; }
+{
+  return 42;
+}
+
+// Postcondition on a boolean-returning function.
+fn always_true_post() -> bool
+  post { r: r; }
+{
+  return true;
+}
+
+// Postcondition with negation.
+fn never_true_post() -> bool
+  post { r: !r; }
+{
+  return false;
+}
+
+// Postcondition on a void function (parameter-only, no result binding).
+fn void_with_post(x: i32)
+  post { x > 0; }
+{
+  x + 1;
+}
+
+// Postcondition with multiple return sites — check is emitted at each.
+fn multi_return_post(x: i32) -> i32
+  post { r: r > 0; }
+{
+  if (x > 10) {
+    return x;
+  }
+  if (x > 0) {
+    return x;
+  }
+  return 1;
+}
+
+// Three return sites with postcondition.
+fn three_returns(a: i32, b: i32) -> i32
+  post { r: r >= 0; }
+{
+  if (a > b) {
+    return a - b;
+  } else if (b > a) {
+    return b - a;
+  } else {
+    return 0;
+  }
+}
+
+// Postcondition with result binding and complex expression.
+fn complex_post(a: i32, b: i32) -> i32
+  post { r: r * r >= 0; }
+{
+  return a + b;
+}
+
+// Postcondition where result is compared against an arithmetic expression.
+fn result_leq_product(a: i32, b: i32) -> i32
+  post { r: r <= a * b; }
+{
+  return a * b;
+}
+
+// Return from inside a while loop with postcondition.
+fn loop_return_post(n: i32) -> i32
+  post { r: r >= 0; }
+{
+  var i: i32 = 0;
+  while (i < n) {
+    if (i > 100) {
+      return i;
+    }
+    i = i + 1;
+  }
+  return i;
+}
+
+// Postcondition on recursive function.
+fn fact(n: i32) -> i32
+  post { r: r >= 1; }
+{
+  if (n <= 1) {
+    return 1;
+  }
+  return n * fact(n - 1);
+}
+
+// Caller of a function with postcondition — should get an assume.
+fn use_always_positive(x: i32) -> i32 {
+  var result: i32 = always_positive(x);
+  return result;
+}
+
+// Caller passes a constant to a function with postcondition.
+fn call_with_const_post() -> i32 {
+  return always_positive(5);
+}
+
+// Caller stores result and does further computation.
+fn call_and_compute(x: i32) -> i32 {
+  var a: i32 = always_positive(x);
+  var b: i32 = a + 10;
+  return b;
+}
+
+// Multiple calls to function with postcondition in one caller.
+fn multi_call_post(a: i32, b: i32) -> i32 {
+  var x: i32 = always_positive(a);
+  var y: i32 = always_positive(b);
+  return x + y;
+}
+
+// Caller of a function with postcondition, used in if condition.
+fn post_in_condition(x: i32) -> i32 {
+  var v: i32 = always_positive(x);
+  if (v > 10) {
+    return v;
+  }
+  return 0;
+}
+
+// Chained calls through functions with postconditions.
+fn post_chain(x: i32) -> i32
+  post { r: r > 0; }
+{
+  return always_positive(x);
+}
+
+// Postcondition with nested parentheses in the expression.
+fn parens_post(x: i32) -> i32
+  post { r: ((r + 1) > 0); }
+{
+  return x;
+}
+
+// Postcondition on function returning bool, used in a caller.
+fn check_true(x: i32) -> bool {
+  return always_true_post();
+}
+
+// Return a constant in multiple branches, each triggers postcondition check.
+fn branch_constants(flag: bool) -> i32
+  post { r: r >= 0; }
+{
+  if (flag) {
+    return 1;
+  } else {
+    return 2;
+  }
+}
+
+// Postcondition with subtraction on result.
+fn sub_post(a: i32, b: i32) -> i32
+  post { r: r - a >= 0; }
+{
+  return a + b;
+}
+
+// Many parameters, postcondition referencing several.
+fn multi_param_post(a: i32, b: i32, c: i32) -> i32
+  post { r: r >= a; r >= b; r >= c; }
+{
+  if (a >= b) {
+    if (a >= c) {
+      return a;
+    }
+    return c;
+  }
+  if (b >= c) {
+    return b;
+  }
+  return c;
+}
+
+// Void function with early return and post referencing parameter.
+fn void_early_post(x: i32)
+  post { x >= 0; }
+{
+  if (x < 0) {
+    return;
+  }
+  x + 1;
+}
+
+// Postcondition on a function that does nothing but return the parameter.
+fn transparent(x: i32) -> i32
+  post { r: r == x; }
+{
+  return x;
+}
+
+// Postcondition involving boolean comparison on integer result.
+fn positive_check(x: i32) -> i32
+  post { r: r > 0; }
+{
+  return x + 1;
+}
+
+// Caller using result of function with post in a loop.
+fn loop_caller(n: i32) -> i32 {
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    acc = acc + always_positive(i);
+    i = i + 1;
+  }
+  return acc;
+}

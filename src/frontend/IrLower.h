@@ -33,8 +33,8 @@ private:
   core::u64 m_currentBlockIdx;
   std::unordered_map<core::u64, Register> m_symbolToRegister;
 
-  /// Tracks which symbols (by raw SymbolId) have been definitely assigned
-  /// a value. Used for use-before-initialization diagnostics.
+  // Tracks which symbols (by raw SymbolId) have been definitely assigned
+  // a value. Used for use-before-initialization diagnostics.
   std::unordered_set<core::u64> m_initializedSymbols;
 
   std::shared_ptr<SymbolTable> m_currentSymbolTable;
@@ -42,7 +42,9 @@ private:
   core::DiagnosticList &m_diagnostics;
 
   void resetFunctionState();
-  Register allocateRegister();
+  Register allocateRegister(IRType type);
+  IRType resolveIRType(const SymbolId &symbolId);
+  IRType resultTypeOfBinaryOp(BinaryOperation op, IRType operandType);
   BlockId createBlock();
   IRBlock &currentBlock();
   void setCurrentBlock(BlockId block);

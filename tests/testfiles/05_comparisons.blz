@@ -1,0 +1,121 @@
+// Comparisons: all six relational operators, boolean literals, negation.
+
+fn less_than(a: i32, b: i32) -> bool {
+  return a < b;
+}
+
+fn less_equal(a: i32, b: i32) -> bool {
+  return a <= b;
+}
+
+fn greater_than(a: i32, b: i32) -> bool {
+  return a > b;
+}
+
+fn greater_equal(a: i32, b: i32) -> bool {
+  return a >= b;
+}
+
+fn equal(a: i32, b: i32) -> bool {
+  return a == b;
+}
+
+fn not_equal(a: i32, b: i32) -> bool {
+  return a != b;
+}
+
+// Negation of a boolean parameter.
+fn negate(x: bool) -> bool {
+  return !x;
+}
+
+// Double negation.
+fn double_negate(x: bool) -> bool {
+  return !!x;
+}
+
+// Triple negation (should be equivalent to single negation).
+fn triple_negate(x: bool) -> bool {
+  return !!!x;
+}
+
+// Negation of a comparison result.
+fn not_less(a: i32, b: i32) -> bool {
+  return !(a < b);
+}
+
+// Comparison with arithmetic sub-expressions on both sides.
+fn compare_exprs(a: i32, b: i32) -> bool {
+  return a + 1 <= b * 2;
+}
+
+// Store comparison result in a variable.
+fn stored_comparison(a: i32, b: i32) -> bool {
+  var result: bool = a == b;
+  return result;
+}
+
+// Reassign a boolean variable.
+fn bool_reassign(a: i32, b: i32) -> bool {
+  var flag: bool = a < b;
+  flag = a > b;
+  return flag;
+}
+
+// Compare against zero.
+fn is_positive(x: i32) -> bool {
+  return x > 0;
+}
+
+// Compare against self (always true).
+fn self_equal(x: i32) -> bool {
+  return x == x;
+}
+
+// Boolean literal returns.
+fn always_true() -> bool {
+  return true;
+}
+
+fn always_false() -> bool {
+  return false;
+}
+
+// Negation of boolean literals.
+fn negate_true() -> bool {
+  return !true;
+}
+
+fn negate_false() -> bool {
+  return !false;
+}
+
+// Boolean used as expression statement (discarded).
+fn discard_bool(a: i32, b: i32) {
+  a < b;
+  a == b;
+  !true;
+}
+
+// Comparison result passed to a function call.
+fn accept_bool(x: bool) -> bool {
+  return x;
+}
+
+fn pass_comparison(a: i32, b: i32) -> bool {
+  return accept_bool(a < b);
+}
+
+// Negation of a function call result.
+fn negate_call(a: i32, b: i32) -> bool {
+  return !accept_bool(a < b);
+}
+
+// Multiple comparisons stored in different variables.
+fn multi_compare(a: i32, b: i32) -> bool {
+  var lt: bool = a < b;
+  var gt: bool = a > b;
+  var eq: bool = a == b;
+  // Return one of them — all three were computed.
+  return eq;
+}

@@ -11,6 +11,7 @@ add_library(frontend STATIC
  SymbolTable.cpp
  TypeChecker.cpp
  IrLower.cpp
+ IrPrinter.cpp
  ${ANTLR_BlazeGrammar_CXX_OUTPUTS}
 )
 
@@ -19,4 +20,4 @@ target_include_directories(frontend PUBLIC
  ${ANTLR_BlazeGrammar_OUTPUT_DIR}
 )
 
-target_link_libraries(frontend PUBLIC antlr4_static core)
+target_link_libraries(frontend PUBLIC antlr4_static core fmt::fmt)

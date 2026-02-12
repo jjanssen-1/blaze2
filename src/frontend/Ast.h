@@ -81,6 +81,8 @@ enum BinaryOperation {
   NotEqual
 };
 
+const char *binaryOperationToString(const BinaryOperation &op);
+
 struct BinaryExpr {
   inline BinaryExpr(const BinaryOperation &op, const ExprPtr &lhs,
                     const ExprPtr &rhs)

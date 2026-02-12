@@ -1,0 +1,597 @@
+// Edge cases: unusual but valid programs that stress the lowering pipeline.
+
+// --- Empty / minimal functions ---
+
+// Void function with completely empty body.
+fn empty_body() {
+}
+
+// Void function whose body is a single expression statement.
+fn single_expr_stmt() {
+  42;
+}
+
+// Void function with a single nested block.
+fn nested_empty_block() {
+  {
+  }
+}
+
+// Deeply nested blocks (no control flow, just scoping).
+fn deep_blocks() {
+  {
+    {
+      {
+        {
+          42;
+        }
+      }
+    }
+  }
+}
+
+// Function that only returns a literal.
+fn return_zero() -> i32 {
+  return 0;
+}
+
+// Function returning boolean literal.
+fn return_true() -> bool {
+  return true;
+}
+
+fn return_false() -> bool {
+  return false;
+}
+
+// --- Constants and large values ---
+
+// Return the largest constant we can write.
+fn big_constant() -> i32 {
+  return 999999999;
+}
+
+// Return zero from an expression.
+fn zero_via_sub(x: i32) -> i32 {
+  return x - x;
+}
+
+// All-zero arithmetic.
+fn all_zeros() -> i32 {
+  return 0 + 0 * 0 - 0;
+}
+
+// Multiply by one (identity).
+fn mul_identity(x: i32) -> i32 {
+  return x * 1;
+}
+
+// Add zero (identity).
+fn add_zero(x: i32) -> i32 {
+  return x + 0;
+}
+
+// --- Expression statements (results discarded) ---
+
+fn discard_arithmetic(a: i32, b: i32) {
+  a + b;
+  a - b;
+  a * b;
+  a / b;
+}
+
+fn discard_comparison(a: i32, b: i32) {
+  a < b;
+  a <= b;
+  a > b;
+  a >= b;
+  a == b;
+  a != b;
+}
+
+fn discard_negation(x: bool) {
+  !x;
+  !!x;
+  !!!x;
+}
+
+fn discard_literals() {
+  0;
+  1;
+  42;
+  true;
+  false;
+}
+
+// --- Single-statement if/else edge cases ---
+
+// If with literal true — then-branch is always taken.
+fn always_taken() -> i32 {
+  if (true) {
+    return 1;
+  }
+  return 0;
+}
+
+// If with literal false — then-branch is never taken.
+fn never_taken() -> i32 {
+  if (false) {
+    return 1;
+  }
+  return 0;
+}
+
+// If-else where both branches return the same value.
+fn same_both_branches() -> i32 {
+  if (true) {
+    return 42;
+  } else {
+    return 42;
+  }
+}
+
+// If without else on a void function — fallthrough only path.
+fn void_if_no_else(flag: bool) {
+  if (flag) {
+    1;
+  }
+}
+
+// --- While loop edge cases ---
+
+// While(false) — body never executes.
+fn while_false() -> i32 {
+  var x: i32 = 0;
+  while (false) {
+    x = 99;
+  }
+  return x;
+}
+
+// While(true) with immediate return — executes exactly once.
+fn while_true_immediate_return() -> i32 {
+  while (true) {
+    return 7;
+  }
+  return 0;
+}
+
+// While loop where the condition is a negated boolean.
+fn while_negated(flag: bool) -> i32 {
+  var count: i32 = 0;
+  while (!flag) {
+    count = count + 1;
+    return count;
+  }
+  return count;
+}
+
+// Nested while, inner loop has early return.
+fn nested_while_early_return(n: i32) -> i32 {
+  var i: i32 = 0;
+  while (i < n) {
+    var j: i32 = 0;
+    while (j < n) {
+      if (j > 5) {
+        return j;
+      }
+      j = j + 1;
+    }
+    i = i + 1;
+  }
+  return 0;
+}
+
+// --- Return edge cases ---
+
+// Void function with explicit return statement (no value).
+fn explicit_void_return() {
+  return;
+}
+
+// Multiple explicit void returns.
+fn multi_void_return(flag: bool) {
+  if (flag) {
+    return;
+  }
+  return;
+}
+
+// Return inside a nested block.
+fn return_from_block() -> i32 {
+  {
+    return 42;
+  }
+}
+
+// Return from deeply nested if-else.
+fn deep_return(a: i32, b: i32, c: i32) -> i32 {
+  if (a > 0) {
+    if (b > 0) {
+      if (c > 0) {
+        return a + b + c;
+      } else {
+        return a + b;
+      }
+    } else {
+      if (c > 0) {
+        return a + c;
+      } else {
+        return a;
+      }
+    }
+  } else {
+    return 0;
+  }
+}
+
+// --- Variable edge cases ---
+
+// Variable initialized to itself via an expression.
+fn self_init() -> i32 {
+  var x: i32 = 0;
+  var y: i32 = x + x;
+  return y;
+}
+
+// Long chain of variable dependencies.
+fn dependency_chain() -> i32 {
+  var a: i32 = 1;
+  var b: i32 = a + 1;
+  var c: i32 = b + 1;
+  var d: i32 = c + 1;
+  var e: i32 = d + 1;
+  var f: i32 = e + 1;
+  var g: i32 = f + 1;
+  var h: i32 = g + 1;
+  return h;
+}
+
+// Many reassignments to the same variable (SSA stress).
+fn many_reassignments() -> i32 {
+  var x: i32 = 0;
+  x = 1;
+  x = 2;
+  x = 3;
+  x = 4;
+  x = 5;
+  x = 6;
+  x = 7;
+  x = 8;
+  x = 9;
+  x = 10;
+  return x;
+}
+
+// Variable used as its own update source repeatedly.
+fn self_update() -> i32 {
+  var x: i32 = 1;
+  x = x + x;
+  x = x + x;
+  x = x + x;
+  return x;
+}
+
+// Const and var interleaved.
+fn const_var_interleaved() -> i32 {
+  const a: i32 = 1;
+  var b: i32 = a + 1;
+  const c: i32 = 3;
+  var d: i32 = b + c;
+  return d;
+}
+
+// --- Function call edge cases ---
+
+// Call to a zero-argument function from multiple sites.
+fn get_value() -> i32 {
+  return 7;
+}
+
+fn call_multiple_times() -> i32 {
+  var a: i32 = get_value();
+  var b: i32 = get_value();
+  var c: i32 = get_value();
+  return a + b + c;
+}
+
+// Call result immediately returned (no intermediate register visible).
+fn passthrough(x: i32) -> i32 {
+  return x;
+}
+
+fn call_and_return(x: i32) -> i32 {
+  return passthrough(x);
+}
+
+// Call result used as both operands of a comparison.
+fn compare_same_call(x: i32) -> bool {
+  var a: i32 = passthrough(x);
+  return a == a;
+}
+
+// Recursive base case returns a constant.
+fn rec_base(n: i32) -> i32 {
+  if (n <= 0) {
+    return 0;
+  }
+  return rec_base(n - 1) + 1;
+}
+
+// Single recursive function (no mutual recursion — resolver has no forward decls).
+fn rec_dec(n: i32) -> i32 {
+  if (n <= 0) {
+    return 0;
+  }
+  return rec_dec(n - 1) + 1;
+}
+
+// --- Contract edge cases ---
+
+// Pre with trivial "true" condition.
+fn trivial_pre() -> i32
+  pre { true; }
+{
+  return 1;
+}
+
+// Post with trivial "true" condition.
+fn trivial_post() -> i32
+  post { r: true; }
+{
+  return 1;
+}
+
+// Both pre and post trivially true.
+fn trivial_both() -> i32
+  pre { true; }
+  post { r: true; }
+{
+  return 1;
+}
+
+// Pre with a "false" literal — semantically contradictory but syntactically valid.
+fn contradictory_pre() -> i32
+  pre { false; }
+{
+  return 0;
+}
+
+// Pre checking equality of a param with itself.
+fn tautological_pre(x: i32) -> i32
+  pre { x == x; }
+{
+  return x;
+}
+
+// Post checking equality of result with itself.
+fn tautological_post(x: i32) -> i32
+  post { r: r == r; }
+{
+  return x;
+}
+
+// Pre with constant arithmetic.
+fn constant_pre() -> i32
+  pre { 1 + 1 > 0; }
+{
+  return 42;
+}
+
+// Post with constant arithmetic.
+fn constant_post() -> i32
+  post { r: 1 + 1 > 0; }
+{
+  return 42;
+}
+
+// Pre + post on a void function with early return.
+fn void_early_return_contract(x: i32)
+  pre { x >= 0; }
+  post { x >= 0; }
+{
+  if (x == 0) {
+    return;
+  }
+  x + 1;
+}
+
+// Post with result binding on a function that returns a constant from every path.
+fn all_constant_returns(flag: bool) -> i32
+  post { r: r > 0; }
+{
+  if (flag) {
+    return 1;
+  } else {
+    return 2;
+  }
+}
+
+// Function with many preconditions.
+fn many_pres(a: i32, b: i32, c: i32, d: i32) -> i32
+  pre {
+    a > 0;
+    b > 0;
+    c > 0;
+    d > 0;
+    a < 100;
+    b < 100;
+    c < 100;
+    d < 100;
+  }
+{
+  return a + b + c + d;
+}
+
+// Function with many postconditions.
+fn many_posts(x: i32) -> i32
+  post {
+    r: r > 0;
+    r < 1000;
+    r >= 1;
+    r != 0;
+  }
+{
+  return x + 1;
+}
+
+// Pre+post called by a void function.
+fn contracted_helper(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  return x;
+}
+
+fn void_caller(x: i32) {
+  contracted_helper(x);
+}
+
+// Call to contracted function inside a while-loop condition.
+fn positive_check(x: i32) -> bool
+  pre { x > 0 - 1000; }
+{
+  return x > 0;
+}
+
+fn loop_cond_contract(n: i32) -> i32 {
+  var i: i32 = n;
+  while (positive_check(i)) {
+    i = i - 1;
+  }
+  return i;
+}
+
+// Call to contracted function inside an if condition.
+fn branch_cond_contract(x: i32) -> i32 {
+  if (positive_check(x)) {
+    return x;
+  }
+  return 0;
+}
+
+// Contract expression is a negated call to a contracted function.
+fn neg_contract_call(x: i32) -> i32
+  pre { !positive_check(0 - x); }
+{
+  return x;
+}
+
+// --- Mixed edge cases: combining control flow, variables, calls, contracts ---
+
+// If-else inside a while loop, with contracted function calls in both branches.
+fn complex_mix(n: i32) -> i32 {
+  var acc: i32 = 0;
+  var i: i32 = 1;
+  while (i <= n) {
+    if (positive_check(i)) {
+      acc = acc + contracted_helper(i);
+    } else {
+      acc = acc + 1;
+    }
+    i = i + 1;
+  }
+  return acc;
+}
+
+// Variable assigned from a contracted call, then used in another contracted call.
+fn chained_contracted(x: i32) -> i32 {
+  var a: i32 = contracted_helper(x);
+  var b: i32 = contracted_helper(a);
+  var c: i32 = contracted_helper(b);
+  return c;
+}
+
+// Contracted function whose body has a while loop and multiple return sites.
+fn loop_multi_return(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r >= 0; }
+{
+  var i: i32 = 0;
+  while (i < n) {
+    if (i > 50) {
+      return i;
+    }
+    i = i + 1;
+  }
+  return i;
+}
+
+// Nested if inside a contracted function with post on each return path.
+fn nested_if_post(a: i32, b: i32) -> i32
+  post { r: r >= 0; }
+{
+  if (a > 0) {
+    if (b > 0) {
+      return a + b;
+    } else {
+      return a;
+    }
+  } else {
+    if (b > 0) {
+      return b;
+    } else {
+      return 0;
+    }
+  }
+}
+
+// Reassignment chain combined with contracts.
+fn reassign_contracted(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  var y: i32 = x;
+  y = y + 1;
+  y = y + 1;
+  y = y + 1;
+  return y;
+}
+
+// Parenthesized contract expressions.
+fn parens_contract(x: i32) -> i32
+  pre { (x > 0); }
+  post { r: (r >= x); }
+{
+  return x + 1;
+}
+
+// Contract where the expression is just a boolean parameter.
+fn bool_param_pre(flag: bool) -> i32
+  pre { flag; }
+{
+  return 1;
+}
+
+// Contract where the expression is just the negation of a boolean parameter.
+fn neg_bool_param_pre(flag: bool) -> i32
+  pre { !flag; }
+{
+  return 0;
+}
+
+// Void function with expression statements that are calls to contracted functions.
+fn void_calls_contracted(a: i32, b: i32) {
+  contracted_helper(a);
+  contracted_helper(b);
+  contracted_helper(a + b);
+}
+
+// Function with no parameters, pre that is a constant, post on the result.
+fn const_pre_result_post() -> i32
+  pre { 1 > 0; }
+  post { r: r == 99; }
+{
+  return 99;
+}
+
+// Stress: function calling itself recursively, with pre and post.
+fn rec_countdown(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r == 0; }
+{
+  if (n == 0) {
+    return 0;
+  }
+  return rec_countdown(n - 1);
+}

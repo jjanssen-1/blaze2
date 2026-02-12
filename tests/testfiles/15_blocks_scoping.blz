@@ -1,0 +1,512 @@
+// Nested blocks and scoping: block statements, block-local declarations,
+// deeply nested scopes. No block-level variable shadowing (resolver limitation).
+
+// --- Basic block nesting ---
+
+// Single nested block inside a function.
+fn single_nested_block() -> i32 {
+  var x: i32 = 1;
+  {
+    var y: i32 = 2;
+    x = x + y;
+  }
+  return x;
+}
+
+// Two sequential blocks at the same level.
+fn sequential_blocks() -> i32 {
+  var total: i32 = 0;
+  {
+    var a: i32 = 10;
+    total = total + a;
+  }
+  {
+    var b: i32 = 20;
+    total = total + b;
+  }
+  return total;
+}
+
+// Three sequential blocks.
+fn three_blocks() -> i32 {
+  var acc: i32 = 0;
+  {
+    acc = acc + 1;
+  }
+  {
+    acc = acc + 2;
+  }
+  {
+    acc = acc + 3;
+  }
+  return acc;
+}
+
+// Deeply nested blocks (five levels).
+fn deep_nesting() -> i32 {
+  var x: i32 = 0;
+  {
+    x = x + 1;
+    {
+      x = x + 1;
+      {
+        x = x + 1;
+        {
+          x = x + 1;
+          {
+            x = x + 1;
+          }
+        }
+      }
+    }
+  }
+  return x;
+}
+
+// Empty blocks — should not affect anything.
+fn empty_blocks() -> i32 {
+  var x: i32 = 42;
+  {}
+  {}
+  {}
+  return x;
+}
+
+// Block containing only expression statements (side effects discarded).
+fn block_expr_stmts() {
+  {
+    1;
+    2;
+    3;
+  }
+}
+
+// --- Variables in nested blocks (no shadowing) ---
+
+// Inner block declares a differently-named variable, modifies outer.
+fn inner_block_var() -> i32 {
+  var x: i32 = 1;
+  {
+    var y: i32 = 2;
+    x = x + y;
+  }
+  return x;
+}
+
+// Nested blocks each declare their own unique variables.
+fn unique_vars_nested() -> i32 {
+  var result: i32 = 0;
+  {
+    var a: i32 = 10;
+    result = result + a;
+    {
+      var b: i32 = 20;
+      result = result + b;
+      {
+        var c: i32 = 30;
+        result = result + c;
+      }
+    }
+  }
+  return result;
+}
+
+// Sequential blocks with unique variable names.
+fn sequential_unique_vars() -> i32 {
+  var total: i32 = 0;
+  {
+    var p: i32 = 10;
+    total = total + p;
+  }
+  {
+    var q: i32 = 20;
+    total = total + q;
+  }
+  {
+    var r: i32 = 30;
+    total = total + r;
+  }
+  return total;
+}
+
+// Parameter read inside a nested block.
+fn read_param_in_block(x: i32) -> i32 {
+  var result: i32 = 0;
+  {
+    var y: i32 = x + 1;
+    result = y;
+  }
+  return result;
+}
+
+// Outer variable modified in block, then read after.
+fn modify_then_read() -> i32 {
+  var x: i32 = 1;
+  x = x + 10;
+  {
+    var bonus: i32 = 50;
+    x = x + bonus;
+  }
+  return x;
+}
+
+// --- Blocks inside control flow ---
+
+// Block inside then-branch of if.
+fn block_in_if(flag: bool) -> i32 {
+  var result: i32 = 0;
+  if (flag) {
+    {
+      var temp_if: i32 = 42;
+      result = temp_if;
+    }
+  }
+  return result;
+}
+
+// Block inside both branches of if-else (unique names per branch).
+fn block_in_if_else(flag: bool) -> i32 {
+  var result: i32 = 0;
+  if (flag) {
+    {
+      var val_then: i32 = 10;
+      result = val_then;
+    }
+  } else {
+    {
+      var val_else: i32 = 20;
+      result = val_else;
+    }
+  }
+  return result;
+}
+
+// Block inside while loop body.
+fn block_in_while(n: i32) -> i32 {
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    {
+      var contribution: i32 = i * 2;
+      acc = acc + contribution;
+    }
+    i = i + 1;
+  }
+  return acc;
+}
+
+// Nested blocks inside a while loop.
+fn nested_blocks_in_while(n: i32) -> i32 {
+  var sum: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    {
+      var a_loop: i32 = i;
+      {
+        var b_loop: i32 = a_loop + 1;
+        sum = sum + b_loop;
+      }
+    }
+    i = i + 1;
+  }
+  return sum;
+}
+
+// --- Blocks with variable declarations used across scopes ---
+
+// Outer variable modified inside a block, then read after.
+fn modify_in_block() -> i32 {
+  var x: i32 = 0;
+  {
+    x = 100;
+  }
+  return x;
+}
+
+// Outer variable modified in multiple nested blocks.
+fn multi_modify() -> i32 {
+  var x: i32 = 0;
+  {
+    x = x + 1;
+    {
+      x = x + 2;
+      {
+        x = x + 3;
+      }
+    }
+  }
+  return x;
+}
+
+// Block-local variable initialized from outer variable.
+fn init_from_outer() -> i32 {
+  var outer: i32 = 5;
+  var result: i32 = 0;
+  {
+    var inner: i32 = outer * 2;
+    result = inner;
+  }
+  return result;
+}
+
+// Multiple block-local variables referencing each other.
+fn block_local_chain() -> i32 {
+  var result: i32 = 0;
+  {
+    var bl_a: i32 = 1;
+    var bl_b: i32 = bl_a + 1;
+    var bl_c: i32 = bl_b + 1;
+    var bl_d: i32 = bl_c + 1;
+    result = bl_d;
+  }
+  return result;
+}
+
+// --- Blocks combined with function calls ---
+
+fn blk_helper(x: i32) -> i32 {
+  return x + 1;
+}
+
+fn call_in_block(x: i32) -> i32 {
+  var result: i32 = 0;
+  {
+    result = blk_helper(x);
+  }
+  return result;
+}
+
+fn multi_calls_in_blocks(x: i32) -> i32 {
+  var a_val: i32 = 0;
+  var b_val: i32 = 0;
+  {
+    a_val = blk_helper(x);
+  }
+  {
+    b_val = blk_helper(a_val);
+  }
+  return b_val;
+}
+
+// --- Blocks combined with contracts ---
+
+fn blk_contracted(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  return x;
+}
+
+fn block_with_contract_call(x: i32) -> i32 {
+  var result: i32 = 0;
+  {
+    result = blk_contracted(x);
+  }
+  return result;
+}
+
+fn nested_block_contract_call(x: i32) -> i32 {
+  var result: i32 = 0;
+  {
+    {
+      result = blk_contracted(x);
+    }
+  }
+  return result;
+}
+
+// Contract on a function that uses blocks internally.
+fn contracted_with_blocks(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r >= 0; }
+{
+  var result: i32 = x;
+  {
+    var temp1: i32 = result + 1;
+    result = temp1;
+  }
+  {
+    var temp2: i32 = result + 1;
+    result = temp2;
+  }
+  return result;
+}
+
+// --- Stress: many blocks with modification (no shadowing) ---
+
+fn stress_blocks() -> i32 {
+  var x: i32 = 0;
+  {
+    var local1: i32 = 100;
+    local1 + 1;
+  }
+  x = x + 1;
+  {
+    var local2: i32 = 200;
+    local2 + 2;
+  }
+  x = x + 1;
+  {
+    var local3: i32 = 300;
+    local3 + 3;
+  }
+  x = x + 1;
+  return x;
+}
+
+// Block inside a block inside an if inside a while.
+fn deep_control_blocks(n: i32) -> i32 {
+  var total: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    if (i > 0) {
+      {
+        {
+          var local_sq: i32 = i * i;
+          total = total + local_sq;
+        }
+      }
+    }
+    i = i + 1;
+  }
+  return total;
+}
+
+// --- Void function with blocks and returns ---
+
+fn void_block_return(flag: bool) {
+  {
+    if (flag) {
+      return;
+    }
+  }
+  42;
+}
+
+// Block immediately before return.
+fn block_before_return() -> i32 {
+  var x: i32 = 0;
+  {
+    x = 42;
+  }
+  return x;
+}
+
+// Unique variable names reused across sequential blocks.
+fn reuse_name_across_blocks() -> i32 {
+  var sum: i32 = 0;
+  {
+    var t1: i32 = 10;
+    sum = sum + t1;
+  }
+  {
+    var t2: i32 = 20;
+    sum = sum + t2;
+  }
+  {
+    var t3: i32 = 30;
+    sum = sum + t3;
+  }
+  return sum;
+}
+
+// Const declared inside a block.
+fn const_in_block() -> i32 {
+  var result: i32 = 0;
+  {
+    const magic: i32 = 7;
+    result = magic * 6;
+  }
+  return result;
+}
+
+// Const in nested blocks (unique names).
+fn const_nested_blocks() -> i32 {
+  var result: i32 = 0;
+  {
+    const ca: i32 = 1;
+    {
+      const cb: i32 = 2;
+      {
+        const cc: i32 = 3;
+        result = ca + cb + cc;
+      }
+    }
+  }
+  return result;
+}
+
+// Boolean variable declared in a block.
+fn bool_in_block(x: i32) -> bool {
+  var result: bool = false;
+  {
+    var check: bool = x > 0;
+    result = check;
+  }
+  return result;
+}
+
+// Block with arithmetic chain.
+fn arithmetic_chain_block() -> i32 {
+  var result: i32 = 0;
+  {
+    var step1: i32 = 1 + 2;
+    var step2: i32 = step1 * 3;
+    var step3: i32 = step2 - 4;
+    result = step3;
+  }
+  return result;
+}
+
+// Nested blocks with function calls at each level.
+fn nested_calls(x: i32) -> i32 {
+  var result: i32 = x;
+  {
+    result = blk_helper(result);
+    {
+      result = blk_helper(result);
+      {
+        result = blk_helper(result);
+      }
+    }
+  }
+  return result;
+}
+
+// Nested block inside else branch.
+fn block_in_else(flag: bool) -> i32 {
+  var result: i32 = 0;
+  if (flag) {
+    result = 1;
+  } else {
+    {
+      var else_val: i32 = 2;
+      result = else_val;
+    }
+  }
+  return result;
+}
+
+// Variable declared before block, modified inside, used after.
+fn var_across_block() -> i32 {
+  var x: i32 = 10;
+  var y: i32 = 20;
+  {
+    var z: i32 = x + y;
+    x = z;
+  }
+  return x;
+}
+
+// Multiple levels of nesting with contracts at the deepest level.
+fn deep_contract_call(x: i32) -> i32 {
+  var result: i32 = 0;
+  {
+    {
+      {
+        result = blk_contracted(x);
+      }
+    }
+  }
+  return result;
+}

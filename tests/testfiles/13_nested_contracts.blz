@@ -1,0 +1,371 @@
+// Nested contract calls: edge cases where contract expressions themselves
+// contain function calls to functions that have their own contracts.
+// This exercises the ghost-state save/restore logic and temporary binding
+// management in the IR lowering.
+
+// --- Helpers with contracts ---
+
+// Simple predicate with a precondition of its own.
+fn is_positive(x: i32) -> bool
+  pre { x > 0 - 1000; }
+  post { r: r == true; }
+{
+  return x > 0;
+}
+
+// Another predicate — checks if a value is in a range.
+fn in_range(x: i32, lo: i32, hi: i32) -> bool
+  pre { lo <= hi; }
+{
+  if (x >= lo) {
+    if (x <= hi) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// A helper that returns a clamped value, has both pre and post.
+fn clamp_val(x: i32, lo: i32, hi: i32) -> i32
+  pre { lo <= hi; }
+  post { r: r >= lo; r <= hi; }
+{
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+// Identity with a precondition — used inside other contracts.
+fn checked_id(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r == x; }
+{
+  return x;
+}
+
+// --- Single-level nesting: contract expression calls a contracted function ---
+
+// Precondition calls is_positive (which has its own pre and post).
+fn guarded_double(x: i32) -> i32
+  pre { is_positive(x); }
+  post { r: r > 0; }
+{
+  return x * 2;
+}
+
+// Postcondition calls is_positive on the result.
+fn ensure_positive(x: i32) -> i32
+  post { r: is_positive(r); }
+{
+  if (x > 0) {
+    return x;
+  }
+  return 1;
+}
+
+// Both pre and post call contracted functions.
+fn both_nested(x: i32) -> i32
+  pre { is_positive(x); }
+  post { r: is_positive(r); }
+{
+  return x;
+}
+
+// --- Caller of single-level nested: triggers contract lowering at call site ---
+
+fn call_guarded_double() -> i32 {
+  return guarded_double(5);
+}
+
+fn call_guarded_double_var(n: i32) -> i32 {
+  var v: i32 = n + 1;
+  return guarded_double(v);
+}
+
+fn call_ensure_positive() -> i32 {
+  return ensure_positive(0 - 3);
+}
+
+fn call_both_nested(x: i32) -> i32 {
+  return both_nested(x + 1);
+}
+
+// Multiple calls to nested-contract functions in one caller.
+fn multi_call_nested(a: i32, b: i32) -> i32 {
+  var x: i32 = guarded_double(a);
+  var y: i32 = ensure_positive(b);
+  return x + y;
+}
+
+// --- Two-level nesting: contract calls a function whose contract calls another ---
+
+// deeper_guard's precondition calls guarded_double, which itself has a pre
+// that calls is_positive. This means lowering deeper_guard's pre at a call
+// site triggers: lower guarded_double's pre (which triggers is_positive's
+// pre+post), then guarded_double's post.
+fn deeper_guard(x: i32) -> i32
+  pre { guarded_double(x) > 0; }
+  post { r: r > 0; }
+{
+  return x * 3;
+}
+
+fn call_deeper_guard() -> i32 {
+  return deeper_guard(10);
+}
+
+// --- Three-level nesting: a -> b -> c -> d chain of contract calls ---
+
+fn level_c(x: i32) -> bool
+  pre { x > 0; }
+  post { r: r == true; }
+{
+  return x > 0;
+}
+
+fn level_b(x: i32) -> bool
+  pre { level_c(x); }
+{
+  return x > 0;
+}
+
+fn level_a(x: i32) -> i32
+  pre { level_b(x); }
+  post { r: r > 0; }
+{
+  return x;
+}
+
+fn call_level_a() -> i32 {
+  return level_a(42);
+}
+
+// --- Postcondition nesting: post calls a function that has a post ---
+
+fn validate(x: i32) -> bool
+  post { r: r == true; }
+{
+  return true;
+}
+
+fn checked_computation(x: i32) -> i32
+  pre { x > 0; }
+  post { r: validate(r); }
+{
+  return x + 1;
+}
+
+fn call_checked_computation() -> i32 {
+  return checked_computation(5);
+}
+
+// --- Mixed nesting: pre calls one contracted function, post calls another ---
+
+fn check_input(x: i32) -> bool
+  pre { x > 0 - 500; }
+{
+  return x > 0;
+}
+
+fn check_output(x: i32) -> bool
+  pre { x > 0 - 500; }
+  post { r: r == true; }
+{
+  return x > 0;
+}
+
+fn mixed_nested(x: i32) -> i32
+  pre { check_input(x); }
+  post { r: check_output(r); }
+{
+  return x + 1;
+}
+
+fn call_mixed_nested() -> i32 {
+  return mixed_nested(10);
+}
+
+// --- Nested contract with multiple arguments ---
+
+fn both_positive(a: i32, b: i32) -> bool
+  pre { a > 0 - 1000; b > 0 - 1000; }
+{
+  if (a > 0) {
+    if (b > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+fn needs_both(a: i32, b: i32) -> i32
+  pre { both_positive(a, b); }
+  post { r: r > 0; }
+{
+  return a + b;
+}
+
+fn call_needs_both() -> i32 {
+  return needs_both(3, 4);
+}
+
+// --- Nested contracts in a loop caller ---
+
+fn loop_nested_caller(n: i32) -> i32 {
+  var acc: i32 = 0;
+  var i: i32 = 1;
+  while (i <= n) {
+    acc = acc + guarded_double(i);
+    i = i + 1;
+  }
+  return acc;
+}
+
+// --- Nested contracts in an if-else caller ---
+
+fn branch_nested_caller(x: i32) -> i32 {
+  if (is_positive(x)) {
+    return guarded_double(x);
+  } else {
+    return ensure_positive(x);
+  }
+}
+
+// --- Multiple nested-contract calls as arguments ---
+
+fn add_vals(a: i32, b: i32) -> i32 {
+  return a + b;
+}
+
+fn nested_as_args(x: i32) -> i32 {
+  return add_vals(guarded_double(x), ensure_positive(x));
+}
+
+// --- Nested contract call returning bool used directly as the condition ---
+
+fn direct_bool_pre(x: i32) -> i32
+  pre { is_positive(x); }
+{
+  return x;
+}
+
+fn direct_bool_post(x: i32) -> i32
+  post { r: is_positive(r); }
+{
+  return x + 1;
+}
+
+// --- Contract calls checked_id which has both pre and post ---
+
+fn uses_checked_id(x: i32) -> i32
+  pre { checked_id(x) >= 0; }
+  post { r: checked_id(r) >= 0; }
+{
+  return x + 1;
+}
+
+fn call_uses_checked_id() -> i32 {
+  return uses_checked_id(5);
+}
+
+// --- Stress: many contracted helpers called in one contract block ---
+
+fn p1(x: i32) -> bool
+  pre { x > 0 - 1000; }
+{ return x > 0; }
+
+fn p2(x: i32) -> bool
+  pre { x > 0 - 1000; }
+{ return x > 1; }
+
+fn p3(x: i32) -> bool
+  pre { x > 0 - 1000; }
+{ return x > 2; }
+
+fn multi_nested_pre(x: i32) -> i32
+  pre { p1(x); p2(x); p3(x); }
+  post { r: r > 0; }
+{
+  return x;
+}
+
+fn call_multi_nested_pre() -> i32 {
+  return multi_nested_pre(10);
+}
+
+// --- Contract on a void function with nested calls ---
+
+fn void_nested_pre(x: i32)
+  pre { is_positive(x); }
+  post { is_positive(x); }
+{
+  x + 1;
+}
+
+fn call_void_nested(x: i32) {
+  void_nested_pre(x + 1);
+}
+
+// --- Nested contracts where the helper is recursive ---
+
+fn rec_check(n: i32) -> bool
+  pre { n >= 0; }
+  post { r: r == true; }
+{
+  if (n == 0) {
+    return true;
+  }
+  return rec_check(n - 1);
+}
+
+fn uses_rec_check(x: i32) -> i32
+  pre { rec_check(x); }
+{
+  return x;
+}
+
+fn call_uses_rec_check() -> i32 {
+  return uses_rec_check(3);
+}
+
+// --- Contract with in_range helper (three arguments) ---
+
+fn ranged_func(x: i32) -> i32
+  pre { in_range(x, 0, 100); }
+  post { r: in_range(r, 0, 200); }
+{
+  return x * 2;
+}
+
+fn call_ranged_func() -> i32 {
+  return ranged_func(50);
+}
+
+// --- Nested contract combined with clamp_val (pre + post helper) ---
+
+fn safe_process(x: i32) -> i32
+  pre { x > 0 - 100; x < 100; }
+  post { r: r >= 0; r <= 50; }
+{
+  return clamp_val(x, 0, 50);
+}
+
+fn call_safe_process() -> i32 {
+  return safe_process(75);
+}
+
+// --- Edge case: contracted function called twice in one contract expression ---
+
+fn double_call_pre(x: i32) -> i32
+  pre { is_positive(x); is_positive(x + 1); }
+{
+  return x;
+}
+
+fn call_double_call_pre() -> i32 {
+  return double_call_pre(5);
+}

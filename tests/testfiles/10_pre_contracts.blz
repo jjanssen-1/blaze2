@@ -1,0 +1,251 @@
+// Precondition contracts: various patterns of pre { ... } specifications.
+
+// Single precondition on a parameter.
+fn require_positive(x: i32) -> i32
+  pre { x > 0; }
+{
+  return x;
+}
+
+// Precondition with less-than.
+fn require_bounded(x: i32) -> i32
+  pre { x < 100; }
+{
+  return x;
+}
+
+// Precondition with equality check.
+fn require_zero(x: i32) -> i32
+  pre { x == 0; }
+{
+  return x + 1;
+}
+
+// Precondition with not-equal.
+fn require_nonzero(x: i32) -> i32
+  pre { x != 0; }
+{
+  return 100 / x;
+}
+
+// Precondition with less-than-or-equal.
+fn require_at_most_ten(x: i32) -> i32
+  pre { x <= 10; }
+{
+  return x;
+}
+
+// Precondition with greater-than-or-equal.
+fn require_nonneg(x: i32) -> i32
+  pre { x >= 0; }
+{
+  return x;
+}
+
+// Multiple preconditions in a single pre block (range constraint).
+fn require_range(x: i32) -> i32
+  pre { x > 0; x < 100; }
+{
+  return x;
+}
+
+// Two parameters, each with their own constraint in one pre block.
+fn require_both_positive(a: i32, b: i32) -> i32
+  pre { a > 0; b > 0; }
+{
+  return a + b;
+}
+
+// Precondition involving an expression on the parameter.
+fn require_sum_positive(a: i32, b: i32) -> i32
+  pre { a + b > 0; }
+{
+  return a + b;
+}
+
+// Precondition involving multiplication.
+fn require_product_positive(a: i32, b: i32) -> i32
+  pre { a * b > 0; }
+{
+  return a * b;
+}
+
+// Precondition comparing two parameters.
+fn require_ordered(a: i32, b: i32) -> i32
+  pre { a < b; }
+{
+  return b - a;
+}
+
+// Precondition comparing two parameters with equality.
+fn require_equal(a: i32, b: i32) -> i32
+  pre { a == b; }
+{
+  return a;
+}
+
+// Precondition on a boolean parameter.
+fn require_true(flag: bool) -> i32
+  pre { flag; }
+{
+  return 1;
+}
+
+// Precondition with negation of a boolean parameter.
+fn require_false(flag: bool) -> i32
+  pre { !flag; }
+{
+  return 0;
+}
+
+// Precondition on a void function.
+fn void_with_pre(x: i32)
+  pre { x > 0; }
+{
+  x + 1;
+}
+
+// Precondition on a function with no parameters — always-true trivial pre.
+fn trivial_pre() -> i32
+  pre { true; }
+{
+  return 42;
+}
+
+// Precondition with complex arithmetic expression.
+fn complex_pre(a: i32, b: i32, c: i32) -> i32
+  pre { a * b + c > 0; }
+{
+  return a * b + c;
+}
+
+// Precondition with deeply nested parentheses.
+fn nested_parens_pre(x: i32) -> i32
+  pre { ((x + 1) * 2) > 0; }
+{
+  return x;
+}
+
+// Precondition with comparison of two arithmetic expressions.
+fn compare_exprs_pre(a: i32, b: i32) -> i32
+  pre { a + 1 < b * 2; }
+{
+  return b - a;
+}
+
+// Many preconditions (three conditions).
+fn three_pres(a: i32, b: i32, c: i32) -> i32
+  pre { a > 0; b > 0; c > 0; }
+{
+  return a + b + c;
+}
+
+// Precondition that references all parameters in one expression.
+fn all_params_pre(a: i32, b: i32, c: i32) -> i32
+  pre { a + b + c > 0; }
+{
+  return a + b + c;
+}
+
+// Precondition with subtraction.
+fn sub_pre(a: i32, b: i32) -> i32
+  pre { a - b > 0; }
+{
+  return a - b;
+}
+
+// Function with precondition called by another function — caller site check.
+fn guarded(x: i32) -> i32
+  pre { x > 0; }
+{
+  return x * 2;
+}
+
+fn call_guarded() -> i32 {
+  return guarded(10);
+}
+
+// Caller passes a variable.
+fn call_guarded_var() -> i32 {
+  var n: i32 = 5;
+  return guarded(n);
+}
+
+// Caller passes an expression.
+fn call_guarded_expr(a: i32) -> i32 {
+  return guarded(a + 1);
+}
+
+// Multiple calls to a function with preconditions.
+fn multi_call_guarded() -> i32 {
+  var a: i32 = guarded(1);
+  var b: i32 = guarded(2);
+  var c: i32 = guarded(3);
+  return a + b + c;
+}
+
+// Chained call through a function with preconditions.
+fn chain_guarded(x: i32) -> i32
+  pre { x > 0; }
+{
+  return guarded(x);
+}
+
+// Precondition on a function that itself calls a function with preconditions.
+fn double_guarded(x: i32) -> i32
+  pre { x > 10; }
+{
+  return guarded(x - 5);
+}
+
+// Precondition involving division.
+fn div_pre(a: i32, b: i32) -> i32
+  pre { b != 0; }
+{
+  return a / b;
+}
+
+// Precondition with negated comparison.
+fn negated_pre(x: i32) -> i32
+  pre { !(x == 0); }
+{
+  return x;
+}
+
+// Precondition on a function with many parameters.
+fn four_params(a: i32, b: i32, c: i32, d: i32) -> i32
+  pre { a > 0; b > 0; c > 0; d > 0; }
+{
+  return a + b + c + d;
+}
+
+// Precondition used with if-else body.
+fn pre_with_branch(x: i32) -> i32
+  pre { x >= 0; }
+{
+  if (x > 10) {
+    return x - 10;
+  } else {
+    return x;
+  }
+}
+
+// Precondition used with while loop body.
+fn pre_with_loop(n: i32) -> i32
+  pre { n > 0; }
+{
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    acc = acc + i;
+    i = i + 1;
+  }
+  return acc;
+}
+
+// Precondition on a function returning bool.
+fn is_big(x: i32) -> bool
+  pre { x >= 0; }
+{
+  return x > 100;
+}

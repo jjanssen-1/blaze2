@@ -1,9 +1,10 @@
 #include "FrontendDriver.h"
 
-#include "AntlrVisitor.h"
+#include "frontend/AntlrVisitor.h"
+#include "frontend/TypeChecker.h"
+
 #include "BlazeLexer.h"
 #include "BlazeParser.h"
-#include "TypeChecker.h"
 
 #include <any>
 #include <exception>
@@ -122,7 +123,7 @@ parseSource(const std::shared_ptr<core::Source> &source,
       return ParseAstResult{nullptr, source};
     }
 
-    BlazeVisitorImpl visitor(source);
+    BlazeVisitorImpl visitor(source, diagnostics);
     auto rootAny = program ? program->accept(&visitor) : std::any{};
     if (!rootAny.has_value()) {
       return tl::make_unexpected(ParseError::NoAstProduced);

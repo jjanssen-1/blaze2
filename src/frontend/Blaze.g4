@@ -123,8 +123,9 @@ fnSpec
   | POST '{' ( Identifier ':')? exprStmt* '}'
   ;
 
+// Add hex/bin/oct later
 Integer
-  : [0-9]+
+  : [0-9']+
   ;
 
 Identifier

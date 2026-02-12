@@ -9,12 +9,31 @@
 
 namespace blaze::frontend {
 
+enum class IRType {
+  I32,
+  Bool,
+  Void,
+};
+
+inline const char *irTypeToString(IRType type) {
+  switch (type) {
+  case IRType::I32:
+    return "i32";
+  case IRType::Bool:
+    return "bool";
+  case IRType::Void:
+    return "void";
+  }
+  return "<unknown>";
+}
+
 // Registers and BlockIds are numbered locally per-function.
 // Each function starts from Register{0} and BlockId{0}.
 // The entry block of every function is always BlockId{0}.
 
 struct Register {
   core::u64 id;
+  IRType type;
   inline bool operator==(const Register &other) const { return id == other.id; }
 };
 
@@ -32,6 +51,18 @@ struct BoolConstant {
 };
 
 typedef std::variant<Register, IntConstant, BoolConstant> Operand;
+
+/// Returns the IRType of an Operand. IntConstant is always I32,
+/// BoolConstant is always Bool, and Register carries its type directly.
+inline IRType irTypeOf(const Operand &operand) {
+  if (std::holds_alternative<Register>(operand))
+    return std::get<Register>(operand).type;
+  if (std::holds_alternative<IntConstant>(operand))
+    return IRType::I32;
+  if (std::holds_alternative<BoolConstant>(operand))
+    return IRType::Bool;
+  return IRType::Void; // unreachable
+}
 
 /// A reference to a named function. Used as the callee in CallInstruction
 /// rather than a generic Operand, since static calls always target a known
@@ -145,10 +176,18 @@ struct IRBlock {
   std::optional<Terminator> terminator;
 };
 
+// A typed parameter in an IR-level function signature.
+struct IRParam {
+  Register reg;
+  std::string name; // human-readable, for printing / debugging
+};
+
 // An IR-level function. Block and register IDs are local to the function.
 // The entry block is always the first block (blocks[0], id == BlockId{0}).
 struct IRFunction {
   std::string name;
+  IRType returnType;
+  std::vector<IRParam> parameters;
   std::vector<IRBlock> blocks;
 };
 

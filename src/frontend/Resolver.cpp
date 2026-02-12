@@ -101,8 +101,6 @@ void Resolver::resolveFunction(const Function &function) {
     }
   }
 
-  // Resolve function specifications now that parameters and the function
-  // itself are in scope.
   resolveFunctionSpecs(function.specifications, returnTypeId);
 
   // Populate contract and parameter-symbol data on the FunctionInfo so
@@ -464,7 +462,7 @@ void Resolver::resolveFunctionSpecs(const FunctionSpecifications &spec,
     resolveExpr(expr);
   }
 
-  // If a result binding is present (e.g. `post(r) { ... }`), introduce
+  // If a result binding is present (e.g. `post {r: ... }`), introduce
   // a const variable symbol for it, scoped only to the postconditions.
   bool pushedResultScope = false;
   if (spec.postResultBinding.has_value()) {
@@ -486,7 +484,7 @@ void Resolver::resolveFunctionSpecs(const FunctionSpecifications &spec,
         pushScope();
         pushedResultScope = true;
 
-        VariableInfo info{returnTypeId.value(), /*isConstant=*/true};
+        VariableInfo info{returnTypeId.value(), true};
         const auto resultId =
             m_symbols.addSymbol(SymbolKind::Variable, *spec.postResultBinding,
                                 core::SourceLocation::empty(), info);

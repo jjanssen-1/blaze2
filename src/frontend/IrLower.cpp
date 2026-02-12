@@ -41,7 +41,33 @@ void IRBuilder::resetFunctionState() {
   m_initializedSymbols.clear();
 }
 
-Register IRBuilder::allocateRegister() { return Register{m_nextRegisterId++}; }
+Register IRBuilder::allocateRegister(IRType type) {
+  return Register{m_nextRegisterId++, type};
+}
+
+IRType IRBuilder::resolveIRType(const SymbolId &symbolId) {
+  const auto *i32Entry = m_builtinRegistry->findType("i32");
+  if (i32Entry && symbolId == i32Entry->symbolId)
+    return IRType::I32;
+  const auto *boolEntry = m_builtinRegistry->findType("bool");
+  if (boolEntry && symbolId == boolEntry->symbolId)
+    return IRType::Bool;
+  return IRType::Void;
+}
+
+IRType IRBuilder::resultTypeOfBinaryOp(BinaryOperation op, IRType operandType) {
+  switch (op) {
+  case BinaryOperation::LessThan:
+  case BinaryOperation::LessEqual:
+  case BinaryOperation::GreaterThan:
+  case BinaryOperation::GreaterEqual:
+  case BinaryOperation::Equal:
+  case BinaryOperation::NotEqual:
+    return IRType::Bool;
+  default:
+    return operandType;
+  }
+}
 
 BlockId IRBuilder::createBlock() {
   BlockId id{m_nextBlockId++};
@@ -86,13 +112,27 @@ void IRBuilder::terminate(const core::SourceLocation &loc,
 IRFunction IRBuilder::lowerFunction(const Function &func) {
   resetFunctionState();
 
+  // Resolve the function's return type.
+  IRType irReturnType = IRType::Void;
+  if (func.returnType.has_value() &&
+      func.returnType->identifier.symbolId.has_value()) {
+    irReturnType = resolveIRType(*func.returnType->identifier.symbolId);
+  }
+
   // Create the entry block (always BlockId{0}).
   BlockId entryBlock = createBlock();
   setCurrentBlock(entryBlock);
 
-  // Parameters are always initialized — they receive values from the caller.
+  // Parameters are always initialized
+  std::vector<IRParam> irParams;
+  irParams.reserve(func.parameters.size());
   for (const auto &param : func.parameters) {
-    Register reg = allocateRegister();
+    IRType paramType = IRType::Void;
+    if (param.type.identifier.symbolId.has_value()) {
+      paramType = resolveIRType(*param.type.identifier.symbolId);
+    }
+    Register reg = allocateRegister(paramType);
+    irParams.push_back(IRParam{reg, param.identifier.name});
     if (param.identifier.symbolId.has_value()) {
       auto raw = param.identifier.symbolId->raw();
       m_symbolToRegister[raw] = reg;
@@ -125,6 +165,8 @@ IRFunction IRBuilder::lowerFunction(const Function &func) {
 
   IRFunction irFunc;
   irFunc.name = func.identifier.name;
+  irFunc.returnType = irReturnType;
+  irFunc.parameters = std::move(irParams);
   irFunc.blocks = std::move(m_blocks);
   return irFunc;
 }
@@ -160,7 +202,11 @@ void IRBuilder::lowerBlock(const Block &block) {
 }
 
 void IRBuilder::lowerDeclStmt(const DeclStmt &stmt) {
-  Register dest = allocateRegister();
+  IRType declType = IRType::Void;
+  if (stmt.type.identifier.symbolId.has_value()) {
+    declType = resolveIRType(*stmt.type.identifier.symbolId);
+  }
+  Register dest = allocateRegister(declType);
 
   // Always bind the declared symbol to its register, even without
   // an initializer — later references need to find it.
@@ -190,12 +236,12 @@ void IRBuilder::lowerReturnStmt(const ReturnStmt &stmt) {
       // Bind the result identifier to the return value register.
       if (m_currentSpecs->postResultBinding.has_value() &&
           m_currentSpecs->postResultBinding->symbolId.has_value()) {
-        Register retReg;
+        Register retReg{0, IRType::Void};
         if (std::holds_alternative<Register>(value)) {
           retReg = std::get<Register>(value);
         } else {
           // Materialize the constant into a ghost register for the binding.
-          retReg = allocateRegister();
+          retReg = allocateRegister(irTypeOf(value));
           emit(stmt.location, true, AssignmentInstruction{retReg, value});
         }
         auto raw = m_currentSpecs->postResultBinding->symbolId->raw();
@@ -219,12 +265,12 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
   Operand cond = lowerExpression(stmt.condition);
 
   // We need the condition in a register for the branch terminator.
-  Register condReg;
+  Register condReg{0, IRType::Bool};
   if (std::holds_alternative<Register>(cond)) {
     condReg = std::get<Register>(cond);
   } else {
     // Materialise the constant into a register.
-    condReg = allocateRegister();
+    condReg = allocateRegister(IRType::Bool);
     emit(stmt.location, AssignmentInstruction{condReg, cond});
   }
 
@@ -247,7 +293,8 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
     m_initializedSymbols = savedInitialized;
     setCurrentBlock(consequentBlock);
     lowerStatement(*stmt.consequent);
-    if (!currentBlock().terminator.has_value()) {
+    bool thenTerminated = currentBlock().terminator.has_value();
+    if (!thenTerminated) {
       terminate(stmt.location, JumpTerminator{mergeBlock});
     }
     auto thenInitialized = m_initializedSymbols;
@@ -256,7 +303,8 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
     m_initializedSymbols = savedInitialized;
     setCurrentBlock(alternativeBlock);
     lowerStatement(**stmt.alternative);
-    if (!currentBlock().terminator.has_value()) {
+    bool elseTerminated = currentBlock().terminator.has_value();
+    if (!elseTerminated) {
       terminate(stmt.location, JumpTerminator{mergeBlock});
     }
     auto elseInitialized = m_initializedSymbols;
@@ -268,6 +316,13 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
       if (elseInitialized.count(sym)) {
         m_initializedSymbols.insert(sym);
       }
+    }
+
+    // If both branches terminated (e.g. both returned), the merge block
+    // is unreachable.
+    if (thenTerminated && elseTerminated) {
+      setCurrentBlock(mergeBlock);
+      terminate(stmt.location, ReturnTerminator{std::nullopt});
     }
   } else {
     // No else: branch to then or straight to merge.
@@ -305,11 +360,11 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   setCurrentBlock(headerBlock);
   Operand cond = lowerExpression(stmt.condition);
 
-  Register condReg;
+  Register condReg{0, IRType::Bool};
   if (std::holds_alternative<Register>(cond)) {
     condReg = std::get<Register>(cond);
   } else {
-    condReg = allocateRegister();
+    condReg = allocateRegister(IRType::Bool);
     emit(stmt.location, AssignmentInstruction{condReg, cond});
   }
 
@@ -333,7 +388,18 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
 void IRBuilder::lowerAssignmentStmt(const AssignmentStmt &stmt) {
   Operand value = lowerExpression(stmt.value);
 
-  Register dest = allocateRegister();
+  // Determine the variable's type from the symbol table.
+  IRType varType = IRType::Void;
+  if (stmt.identifier.symbolId.has_value()) {
+    const auto &sym = m_currentSymbolTable->get(*stmt.identifier.symbolId);
+    if (const auto *varInfo = std::get_if<VariableInfo>(&sym.info)) {
+      varType = resolveIRType(varInfo->type);
+    } else if (const auto *paramInfo = std::get_if<ParameterInfo>(&sym.info)) {
+      varType = resolveIRType(paramInfo->type);
+    }
+  }
+
+  Register dest = allocateRegister(varType);
 
   // Re-bind the symbol to the new register (SSA-style: new definition).
   if (stmt.identifier.symbolId.has_value()) {
@@ -380,7 +446,8 @@ Operand IRBuilder::lowerBinaryExpr(const core::SourceLocation &loc,
   Operand lhs = lowerExpression(expr.left);
   Operand rhs = lowerExpression(expr.right);
 
-  Register dest = allocateRegister();
+  IRType resultType = resultTypeOfBinaryOp(expr.operation, irTypeOf(lhs));
+  Register dest = allocateRegister(resultType);
   emit(loc, BinaryInstruction{expr.operation, dest, lhs, rhs});
   return dest;
 }
@@ -389,7 +456,7 @@ Operand IRBuilder::lowerUnaryExpr(const core::SourceLocation &loc,
                                   const UnaryExpr &expr) {
   Operand src = lowerExpression(expr.operand);
 
-  Register dest = allocateRegister();
+  Register dest = allocateRegister(irTypeOf(src));
   emit(loc, UnaryInstruction{expr.operation, dest, src});
   return dest;
 }
@@ -416,29 +483,58 @@ Operand IRBuilder::lowerCallExpr(const core::SourceLocation &loc,
   // Temporarily bind callee parameter symbols to argument registers so
   // that the callee's contract expressions can be lowered in the caller's
   // register environment.
-  std::vector<core::u64> tempBindings;
+
+  // We save and restore existing bindings rather than simply erasing
+  // them after lowering, because in recursive calls the callee's
+  // parameter symbols are the same as the caller's — erasing would
+  // destroy the caller's own bindings.
+  struct SavedBinding {
+    core::u64 raw;
+    bool hadRegister;
+    Register savedRegister;
+    bool wasInitialized;
+  };
+  std::vector<SavedBinding> tempBindings;
+
   if (calleeInfo && (!calleeInfo->pre.empty() || !calleeInfo->post.empty())) {
     for (core::size i = 0;
          i < args.size() && i < calleeInfo->parameterSymbols.size(); ++i) {
       auto raw = calleeInfo->parameterSymbols[i].raw();
-      Register argReg;
+
+      // Save any existing binding for this symbol.
+      SavedBinding saved;
+      saved.raw = raw;
+      auto regIt = m_symbolToRegister.find(raw);
+      saved.hadRegister = (regIt != m_symbolToRegister.end());
+      saved.savedRegister =
+          saved.hadRegister ? regIt->second : Register{0, IRType::Void};
+      saved.wasInitialized =
+          (m_initializedSymbols.find(raw) != m_initializedSymbols.end());
+      tempBindings.push_back(saved);
+
+      Register argReg{0, IRType::Void};
       if (std::holds_alternative<Register>(args[i])) {
         argReg = std::get<Register>(args[i]);
       } else {
         // Materialize the constant into a ghost register for the binding.
-        argReg = allocateRegister();
+        argReg = allocateRegister(irTypeOf(args[i]));
         emit(loc, true, AssignmentInstruction{argReg, args[i]});
       }
       m_symbolToRegister[raw] = argReg;
       m_initializedSymbols.insert(raw);
-      tempBindings.push_back(raw);
     }
 
     // Prove callee preconditions (assert/check).
     lowerContractChecks(calleeInfo->pre);
   }
 
-  Register dest = allocateRegister();
+  // Determine the return type of the callee.
+  IRType callReturnType = IRType::Void;
+  if (calleeInfo) {
+    callReturnType = resolveIRType(calleeInfo->returnType);
+  }
+
+  Register dest = allocateRegister(callReturnType);
   emit(loc, CallInstruction{dest, func, std::move(args)});
 
   // Assume callee postconditions hold after the call.
@@ -447,18 +543,38 @@ Operand IRBuilder::lowerCallExpr(const core::SourceLocation &loc,
     if (calleeInfo->postResultBinding.has_value() &&
         calleeInfo->postResultBinding->symbolId.has_value()) {
       auto raw = calleeInfo->postResultBinding->symbolId->raw();
+
+      // Save any existing binding for the result symbol.
+      SavedBinding saved;
+      saved.raw = raw;
+      auto regIt = m_symbolToRegister.find(raw);
+      saved.hadRegister = (regIt != m_symbolToRegister.end());
+      saved.savedRegister =
+          saved.hadRegister ? regIt->second : Register{0, IRType::Void};
+      saved.wasInitialized =
+          (m_initializedSymbols.find(raw) != m_initializedSymbols.end());
+      tempBindings.push_back(saved);
+
       m_symbolToRegister[raw] = dest;
       m_initializedSymbols.insert(raw);
-      tempBindings.push_back(raw);
     }
     lowerContractAssumption(calleeInfo->post);
   }
 
-  // Clean up temporary bindings so callee symbols don't leak into the
-  // caller's environment.
-  for (auto raw : tempBindings) {
-    m_symbolToRegister.erase(raw);
-    m_initializedSymbols.erase(raw);
+  // Restore previous bindings so callee symbols don't leak into the
+  // caller's environment. For recursive calls this correctly restores
+  // the caller's own parameter bindings.
+  for (const auto &saved : tempBindings) {
+    if (saved.hadRegister) {
+      m_symbolToRegister[saved.raw] = saved.savedRegister;
+    } else {
+      m_symbolToRegister.erase(saved.raw);
+    }
+    if (saved.wasInitialized) {
+      m_initializedSymbols.insert(saved.raw);
+    } else {
+      m_initializedSymbols.erase(saved.raw);
+    }
   }
 
   return dest;
@@ -486,7 +602,7 @@ Operand IRBuilder::lowerVarExpr(const core::SourceLocation &loc,
 
   m_diagnostics.reportInternal(core::ERROR_INTERNAL_ERROR,
                                "Expression was not resolved", loc);
-  return Register{0};
+  return Register{0, IRType::Void};
 }
 
 Operand IRBuilder::lowerIntExpr(const IntExpr &expr) {

@@ -1,0 +1,305 @@
+// Combined pre + post contracts: functions that specify both preconditions
+// and postconditions, tested at declaration and call sites.
+
+// Simple pre + post together.
+fn abs(x: i32) -> i32
+  pre { x > 0 - 1000; }
+  post { r: r >= 0; }
+{
+  if (x >= 0) {
+    return x;
+  }
+  return 0 - x;
+}
+
+// Pre constrains input, post constrains output relative to input.
+fn increment(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r > x; }
+{
+  return x + 1;
+}
+
+// Pre and post with multiple conditions each.
+fn clamp(x: i32, lo: i32, hi: i32) -> i32
+  pre { lo < hi; lo >= 0; }
+  post { r: r >= lo; r <= hi; }
+{
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+// Pre and post on a two-parameter function.
+fn safe_div(a: i32, b: i32) -> i32
+  pre { b != 0; a >= 0; }
+  post { r: r >= 0; }
+{
+  return a / b;
+}
+
+// Pre ensuring ordering, post ensuring result is the difference.
+fn positive_diff(a: i32, b: i32) -> i32
+  pre { a > b; b >= 0; }
+  post { r: r > 0; }
+{
+  return a - b;
+}
+
+// Post references both result and all parameters.
+fn weighted_sum(a: i32, b: i32, w: i32) -> i32
+  pre { w > 0; a >= 0; b >= 0; }
+  post { r: r >= a; r >= b; }
+{
+  return a * w + b * w;
+}
+
+// Void function with both pre and post (parameter-only post).
+fn void_pre_post(x: i32)
+  pre { x > 0; }
+  post { x > 0; }
+{
+  x + 1;
+}
+
+// Pre + post on boolean-returning function.
+fn is_in_range(x: i32, lo: i32, hi: i32) -> bool
+  pre { lo <= hi; }
+  post { r: r == true; }
+{
+  // Only correct if x is actually in range; contract documents intent.
+  return true;
+}
+
+// Pre + post with negation in postcondition.
+fn nonzero_result(x: i32) -> i32
+  pre { x != 0; }
+  post { r: !(r == 0); }
+{
+  return x;
+}
+
+// Pre + post with arithmetic in postcondition expression.
+fn double_positive(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r == x + x; }
+{
+  return x * 2;
+}
+
+// Multiple return sites, each must satisfy post.
+fn bounded_abs(x: i32) -> i32
+  pre { x > 0 - 50; x < 50; }
+  post { r: r >= 0; r < 50; }
+{
+  if (x >= 0) {
+    return x;
+  }
+  return 0 - x;
+}
+
+// Caller of a function with both pre and post — gets check + assume.
+fn call_increment() -> i32 {
+  return increment(5);
+}
+
+// Caller passes a variable.
+fn call_increment_var(n: i32) -> i32 {
+  var x: i32 = n + 1;
+  return increment(x);
+}
+
+// Caller passes an expression.
+fn call_safe_div() -> i32 {
+  return safe_div(10, 2);
+}
+
+// Multiple calls to a pre+post function in one caller.
+fn multi_call() -> i32 {
+  var a: i32 = increment(0);
+  var b: i32 = increment(a);
+  var c: i32 = increment(b);
+  return c;
+}
+
+// Chained call: result of one pre+post function passed to another.
+fn chain_calls(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r > x; }
+{
+  var y: i32 = increment(x);
+  return increment(y);
+}
+
+// Caller uses result in a condition.
+fn conditional_on_result(x: i32) -> i32 {
+  var v: i32 = abs(x);
+  if (v > 10) {
+    return v;
+  }
+  return 0;
+}
+
+// Caller uses result in a loop.
+fn loop_with_contracted(n: i32) -> i32 {
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    acc = acc + increment(i);
+    i = i + 1;
+  }
+  return acc;
+}
+
+// Pre + post function calling another pre + post function internally.
+fn double_increment(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r > x; }
+{
+  var y: i32 = increment(x);
+  return increment(y);
+}
+
+// Pre + post with the postcondition comparing result to a computed value.
+fn mul_bounded(a: i32, b: i32) -> i32
+  pre { a > 0; a < 10; b > 0; b < 10; }
+  post { r: r > 0; r < 100; }
+{
+  return a * b;
+}
+
+// Pre + post on a function with early return inside if.
+fn early_return_contracted(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r >= 0; }
+{
+  if (x > 100) {
+    return 100;
+  }
+  return x;
+}
+
+// Pre + post on a function with a while loop.
+fn loop_contracted(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r >= 0; }
+{
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    acc = acc + i;
+    i = i + 1;
+  }
+  return acc;
+}
+
+// Post without result binding combined with pre.
+fn no_binding_post(a: i32, b: i32) -> i32
+  pre { a > 0; b > 0; }
+  post { a > 0; }
+{
+  return a + b;
+}
+
+// Deeply nested caller chain: f calls g calls h, all have pre+post.
+fn h(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  return x;
+}
+
+fn g(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  return h(x);
+}
+
+fn f(x: i32) -> i32
+  pre { x > 0; }
+  post { r: r > 0; }
+{
+  return g(x);
+}
+
+// Top-level caller of the chain — no contracts on the caller itself.
+fn call_chain() -> i32 {
+  return f(42);
+}
+
+// Pre + post on a function with nested if-else.
+fn nested_branch_contracted(a: i32, b: i32) -> i32
+  pre { a >= 0; b >= 0; }
+  post { r: r >= 0; }
+{
+  if (a > b) {
+    if (a > 10) {
+      return a;
+    } else {
+      return b;
+    }
+  } else {
+    return b;
+  }
+}
+
+// Pre + post where post uses subtraction.
+fn sub_contracted(a: i32, b: i32) -> i32
+  pre { a >= b; b >= 0; }
+  post { r: r >= 0; }
+{
+  return a - b;
+}
+
+// Function with pre+post that is called inside an expression.
+fn in_expr_context(x: i32) -> i32 {
+  return increment(x) + increment(x);
+}
+
+// Function with pre+post called with a constant zero argument.
+fn call_with_zero() -> i32 {
+  return increment(0);
+}
+
+// Pre + post on a function that returns a boolean.
+fn bool_contracted(a: i32, b: i32) -> bool
+  pre { a >= 0; b >= 0; }
+  post { r: r == true; }
+{
+  return true;
+}
+
+// Caller of bool-contracted function, result used in if.
+fn use_bool_contracted(x: i32) -> i32 {
+  if (bool_contracted(x, x)) {
+    return 1;
+  }
+  return 0;
+}
+
+// Pre + post with three preconditions and two postconditions.
+fn triple_pre_double_post(a: i32, b: i32, c: i32) -> i32
+  pre { a > 0; b > 0; c > 0; }
+  post { r: r > 0; r >= a; }
+{
+  return a + b + c;
+}
+
+// Recursive function with pre + post.
+fn safe_fib(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r >= 0; }
+{
+  if (n <= 0) {
+    return 0;
+  }
+  if (n == 1) {
+    return 1;
+  }
+  return safe_fib(n - 1) + safe_fib(n - 2);
+}

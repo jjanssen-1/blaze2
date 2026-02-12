@@ -1,0 +1,213 @@
+// Function calls: various patterns of calling and composing functions.
+
+// Simple call to a one-argument function.
+fn double(x: i32) -> i32 {
+  return x * 2;
+}
+
+fn call_double() -> i32 {
+  return double(5);
+}
+
+// Call with a variable argument.
+fn call_with_var() -> i32 {
+  var n: i32 = 7;
+  return double(n);
+}
+
+// Call with an expression argument.
+fn call_with_expr(a: i32, b: i32) -> i32 {
+  return double(a + b);
+}
+
+// Multi-argument function.
+fn add(a: i32, b: i32) -> i32 {
+  return a + b;
+}
+
+fn call_add() -> i32 {
+  return add(3, 4);
+}
+
+// Result of one call used as argument to another.
+fn compose_calls(x: i32) -> i32 {
+  return double(double(x));
+}
+
+// Result of one function passed to a different function.
+fn cross_compose(x: i32) -> i32 {
+  return double(add(x, 1));
+}
+
+// Nested calls: f(g(h(x))).
+fn triple(x: i32) -> i32 {
+  return x * 3;
+}
+
+fn deep_compose(x: i32) -> i32 {
+  return double(triple(add(x, 1)));
+}
+
+// Two calls as operands of an expression.
+fn sum_of_calls(a: i32, b: i32) -> i32 {
+  return double(a) + triple(b);
+}
+
+// Call result stored in a variable.
+fn store_call_result(x: i32) -> i32 {
+  var d: i32 = double(x);
+  var t: i32 = triple(x);
+  return d + t;
+}
+
+// Multiple calls in sequence as expression statements (discarded results).
+fn discard_calls(x: i32) {
+  double(x);
+  triple(x);
+  add(x, x);
+}
+
+// Call with constant zero.
+fn call_with_zero() -> i32 {
+  return double(0);
+}
+
+// Call with boolean arguments.
+fn bool_identity(b: bool) -> bool {
+  return b;
+}
+
+fn call_bool() -> bool {
+  return bool_identity(true);
+}
+
+fn call_bool_false() -> bool {
+  return bool_identity(false);
+}
+
+// Call returning bool used in if condition.
+fn is_positive(x: i32) -> bool {
+  return x > 0;
+}
+
+fn use_bool_call(x: i32) -> i32 {
+  if (is_positive(x)) {
+    return x;
+  } else {
+    return 0;
+  }
+}
+
+// Call inside a while loop condition.
+fn above_limit(x: i32, limit: i32) -> bool {
+  return x > limit;
+}
+
+fn loop_with_call(start: i32, limit: i32) -> i32 {
+  var x: i32 = start;
+  while (above_limit(x, limit)) {
+    x = x - 1;
+  }
+  return x;
+}
+
+// Call inside a while loop body.
+fn increment(x: i32) -> i32 {
+  return x + 1;
+}
+
+fn loop_body_call(n: i32) -> i32 {
+  var x: i32 = 0;
+  var i: i32 = 0;
+  while (i < n) {
+    x = increment(x);
+    i = i + 1;
+  }
+  return x;
+}
+
+// Void function calling another void function.
+fn inner_void(x: i32) {
+  x + 1;
+}
+
+fn outer_void(x: i32) {
+  inner_void(x);
+}
+
+// Call result used as both operands of a binary expression.
+fn square_via_call(x: i32) -> i32 {
+  var d: i32 = double(x);
+  return d * d;
+}
+
+// Multiple arguments that are themselves calls.
+fn add_three(a: i32, b: i32, c: i32) -> i32 {
+  return a + b + c;
+}
+
+fn call_with_call_args(x: i32) -> i32 {
+  return add_three(double(x), triple(x), increment(x));
+}
+
+// Recursive function — factorial.
+fn factorial(n: i32) -> i32 {
+  if (n <= 1) {
+    return 1;
+  }
+  return n * factorial(n - 1);
+}
+
+// Single-direction recursion (no mutual recursion — resolver has no forward decls).
+fn count_down(n: i32) -> i32 {
+  if (n <= 0) {
+    return 0;
+  }
+  return count_down(n - 1) + 1;
+}
+
+// Fibonacci — recursive.
+fn fib(n: i32) -> i32 {
+  if (n <= 0) {
+    return 0;
+  }
+  if (n == 1) {
+    return 1;
+  }
+  return fib(n - 1) + fib(n - 2);
+}
+
+// Function call result negated (boolean).
+fn negate_call(x: i32) -> bool {
+  return !is_positive(x);
+}
+
+// Call in a comparison expression.
+fn compare_calls(a: i32, b: i32) -> bool {
+  return double(a) > triple(b);
+}
+
+// Zero-argument function called multiple times.
+fn constant_seven() -> i32 {
+  return 7;
+}
+
+fn use_constant() -> i32 {
+  return constant_seven() + constant_seven();
+}
+
+// Chain of single-argument calls.
+fn step1(x: i32) -> i32 { return x + 1; }
+fn step2(x: i32) -> i32 { return x * 2; }
+fn step3(x: i32) -> i32 { return x - 3; }
+
+fn pipeline(x: i32) -> i32 {
+  return step3(step2(step1(x)));
+}
+
+// Call result stored, then used in another call.
+fn two_step(x: i32) -> i32 {
+  var a: i32 = step1(x);
+  var b: i32 = step2(a);
+  return b;
+}

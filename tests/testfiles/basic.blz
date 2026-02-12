@@ -1,3 +1,4 @@
-fn main(argc: int, argv: string_arr) {
-  return 1;
+// Basic smoke test: minimal valid Blaze program.
+fn main() -> i32 {
+  return 0;
 }
