@@ -49,8 +49,8 @@ public:
                    antlr4::Token *offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string &msg,
                    std::exception_ptr /*e*/) override {
-    auto location = tokenLocation(offendingSymbol, m_source, line,
-                                  charPositionInLine);
+    auto location =
+        tokenLocation(offendingSymbol, m_source, line, charPositionInLine);
     m_diagnostics.reportError(core::ERROR_UNEXPECTED_TOKEN, msg, location);
   }
 
@@ -102,13 +102,14 @@ parseSource(const std::shared_ptr<core::Source> &source,
       return ParseAstResult{nullptr, source};
     }
 
-    BlazeVisitorImpl visitor(source);
+    BlazeVisitorImpl visitor(source, diagnostics);
     auto rootAny = program ? program->accept(&visitor) : std::any{};
     if (!rootAny.has_value()) {
       return tl::make_unexpected(ParseError::NoAstProduced);
     }
 
-    return ParseAstResult{std::any_cast<std::shared_ptr<Root>>(rootAny), source};
+    return ParseAstResult{std::any_cast<std::shared_ptr<Root>>(rootAny),
+                          source};
   } catch (const std::bad_any_cast &) {
     return tl::make_unexpected(ParseError::AstCastFailed);
   } catch (const std::exception &) {
