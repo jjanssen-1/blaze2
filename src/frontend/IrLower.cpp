@@ -135,7 +135,7 @@ IRFunction IRBuilder::lowerFunction(const Function &func) {
     if (param.type.identifier.symbolId.has_value()) {
       paramType = resolveIRType(*param.type.identifier.symbolId);
     }
-    Register reg = allocateRegister(paramType, func.location);
+    Register reg = allocateRegister(paramType, param.location);
     irParams.push_back(IRParam{reg, param.identifier.name});
     if (param.identifier.symbolId.has_value()) {
       auto raw = param.identifier.symbolId->raw();

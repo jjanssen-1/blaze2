@@ -424,13 +424,14 @@ std::any BlazeVisitorImpl::visitParamList(BlazeParser::ParamListContext *ctx) {
 }
 
 std::any BlazeVisitorImpl::visitParam(BlazeParser::ParamContext *ctx) {
+  auto loc = sourceLocation(ctx, *m_source);
   auto *identNode = ctx->Identifier();
   if (!identNode) {
     // TODO: report Internal error.
   }
   Identifier identifier{identNode ? identNode->getText() : std::string{}};
   const TypeName type = std::any_cast<TypeName>(ctx->typeName()->accept(this));
-  return Param{identifier, type};
+  return Param{loc, identifier, type};
 }
 
 } // namespace blaze::frontend

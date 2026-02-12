@@ -62,6 +62,7 @@ struct TypeName {
 };
 
 struct Param {
+  const core::SourceLocation location;
   const Identifier identifier;
   const TypeName type;
 };
