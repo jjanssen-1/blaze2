@@ -8,8 +8,56 @@
 
 #include <cassert>
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace blaze::frontend {
+
+namespace {
+
+void collectAssignedSymbolsFromStmt(const Statement &stmt,
+                                    std::unordered_set<core::u64> &out);
+
+void collectAssignedSymbolsFromBlock(const Block &block,
+                                     std::unordered_set<core::u64> &out) {
+  for (const auto &stmt : block.statements) {
+    collectAssignedSymbolsFromStmt(stmt, out);
+  }
+}
+
+void collectAssignedSymbolsFromStmt(const Statement &stmt,
+                                    std::unordered_set<core::u64> &out) {
+  if (std::holds_alternative<DeclStmt>(stmt)) {
+    const auto &decl = std::get<DeclStmt>(stmt);
+    if (decl.assignedExpression && decl.identifier.symbolId.has_value()) {
+      out.insert(decl.identifier.symbolId->raw());
+    }
+  } else if (std::holds_alternative<AssignmentStmt>(stmt)) {
+    const auto &assign = std::get<AssignmentStmt>(stmt);
+    if (assign.identifier.symbolId.has_value()) {
+      out.insert(assign.identifier.symbolId->raw());
+    }
+  } else if (std::holds_alternative<IfStmt>(stmt)) {
+    const auto &ifStmt = std::get<IfStmt>(stmt);
+    collectAssignedSymbolsFromStmt(*ifStmt.consequent, out);
+    if (ifStmt.alternative.has_value()) {
+      collectAssignedSymbolsFromStmt(**ifStmt.alternative, out);
+    }
+  } else if (std::holds_alternative<WhileStmt>(stmt)) {
+    const auto &whileStmt = std::get<WhileStmt>(stmt);
+    collectAssignedSymbolsFromStmt(*whileStmt.body, out);
+  } else if (std::holds_alternative<BlockPtr>(stmt)) {
+    collectAssignedSymbolsFromBlock(*std::get<BlockPtr>(stmt), out);
+  }
+}
+
+std::vector<core::u64> collectAssignedSymbols(const Statement &stmt) {
+  std::unordered_set<core::u64> assigned;
+  collectAssignedSymbolsFromStmt(stmt, assigned);
+  return std::vector<core::u64>(assigned.begin(), assigned.end());
+}
+
+} // namespace
 
 IRBuilder::IRBuilder(core::DiagnosticList &diagnostics)
     : m_isGhost(false), m_nextBlockId(0), m_nextRegisterId(0),
@@ -350,6 +398,13 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
 }
 
 void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
+  const bool hasInvariants = !stmt.invariants.empty();
+
+  // 1. Check the invariant holds on loop entry (before the first iteration).
+  if (hasInvariants) {
+    lowerContractChecks(stmt.invariants);
+  }
+
   BlockId headerBlock = createBlock();
   BlockId bodyBlock = createBlock();
   BlockId exitBlock = createBlock();
@@ -357,12 +412,38 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   // Jump from the current block into the loop header.
   terminate(stmt.location, JumpTerminator{headerBlock});
 
-  // Save initialized state before the loop. The loop body might not
-  // execute at all (condition could be false on the first check), so
-  // conservatively nothing new is definitely initialized after the loop.
+  // Save state before the loop.
   auto savedInitialized = m_initializedSymbols;
+  auto preLoopRegisters = m_symbolToRegister;
 
+  // Precompute which symbols are assigned in the loop body.
+  std::vector<core::u64> modifiedSymbols;
+  if (hasInvariants) {
+    modifiedSymbols = collectAssignedSymbols(*stmt.body);
+  }
+
+  // --- Emit header with havoc + invariant assumes before lowering body ---
   setCurrentBlock(headerBlock);
+
+  // Snapshot register map at the header entry.
+  auto headerRegisters = m_symbolToRegister;
+
+  if (hasInvariants) {
+    // Havoc only the variables modified by the loop body.
+    for (auto symRaw : modifiedSymbols) {
+      auto preIt = preLoopRegisters.find(symRaw);
+      if (preIt == preLoopRegisters.end())
+        continue;
+      Register fresh = allocateRegister(preIt->second.type, stmt.location);
+      emit(stmt.location, true, HavocInstruction{fresh});
+      headerRegisters[symRaw] = fresh;
+      m_symbolToRegister[symRaw] = fresh;
+    }
+
+    // Assume invariants before the condition.
+    lowerContractAssumption(stmt.invariants);
+  }
+
   Operand cond = lowerExpression(stmt.condition);
 
   Register condReg{0, IRType::Bool};
@@ -378,16 +459,30 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   setCurrentBlock(bodyBlock);
   lowerStatement(*stmt.body);
   if (!currentBlock().terminator.has_value()) {
-    // Loop back to header.
+    // 3. Re-check the invariant at the end of the loop body.
+    if (hasInvariants) {
+      lowerContractChecks(stmt.invariants);
+    }
     terminate(stmt.location, JumpTerminator{headerBlock});
   }
 
-  // Restore to pre-loop state: the body might never execute, so we
-  // cannot assume anything it initializes is definitely initialized.
+  // Restore initialized symbols to pre-loop state.
   m_initializedSymbols = savedInitialized;
+
+  // When invariants are present, restore the header-scope register
+  // mapping so that post-loop code references the registers constrained
+  // by the invariant (and the negated condition).
+  // When there are NO invariants, keep the body-scope mapping to
+  // preserve the existing sound over-approximation behaviour.
+  if (hasInvariants) {
+    m_symbolToRegister = headerRegisters;
+  }
 
   // Continue emitting after the loop.
   setCurrentBlock(exitBlock);
+  if (hasInvariants) {
+    lowerContractAssumption(stmt.invariants);
+  }
 }
 
 void IRBuilder::lowerAssignmentStmt(const AssignmentStmt &stmt) {

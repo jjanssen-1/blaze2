@@ -189,10 +189,12 @@ struct IfStmt : public AstNode {
 
 struct WhileStmt : public AstNode {
   inline WhileStmt(const core::SourceLocation &location, const ExprPtr &cond,
-                   const StmtPtr &bod)
-      : AstNode(location), condition(cond), body(bod) {}
+                   const StmtPtr &bod, std::vector<ExprPtr> invs = {})
+      : AstNode(location), condition(cond), body(bod),
+        invariants(std::move(invs)) {}
   const ExprPtr condition;
   const StmtPtr body;
+  std::vector<ExprPtr> invariants;
 };
 
 struct AssignmentStmt : public AstNode {

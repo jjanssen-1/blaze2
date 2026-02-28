@@ -13,3 +13,4 @@ CMakeUserPresets.json
 build
 .cache
 **/.antlr
+.z3-trace

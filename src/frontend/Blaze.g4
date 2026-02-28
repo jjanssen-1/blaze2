@@ -7,6 +7,7 @@ RETURN: 'return';
 IF: 'if';
 ELSE: 'else';
 WHILE: 'while';
+INVARIANT: 'invariant';
 PRE: 'pre';
 POST: 'post';
 PLUS: '+';
@@ -59,7 +60,11 @@ ifStmt
   ;
 
 whileStmt
-  : WHILE '(' expr ')' block
+  : WHILE '(' expr ')' invariantClause? block
+  ;
+
+invariantClause
+  : INVARIANT '{' exprStmt* '}'
   ;
 
 assignmentStmt

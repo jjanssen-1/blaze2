@@ -8,13 +8,27 @@
 
 namespace blaze::backend {
 
-struct ModelValue {
+struct ParameterValue {
+  core::SourceLocation location;
+  std::string name;
+  std::string value;
+};
+
+struct IntermediateValue {
   core::SourceLocation location;
   std::string value;
 };
 
+struct ViolatedPrecondition {
+  std::string functionName;
+  core::SourceLocation preconditionLocation;
+};
+
 struct CounterExample {
-  std::vector<ModelValue> values;
+  core::SourceLocation checkLocation;
+  std::vector<ParameterValue> parameters;
+  std::vector<IntermediateValue> intermediates;
+  std::optional<ViolatedPrecondition> violatedPrecondition;
 };
 
 class VcBackend {

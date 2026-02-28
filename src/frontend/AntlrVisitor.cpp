@@ -159,7 +159,17 @@ std::any BlazeVisitorImpl::visitWhileStmt(BlazeParser::WhileStmtContext *ctx) {
   const StmtPtr body =
       std::make_shared<Statement>(bodyBlock->location, BlockPtr(bodyBlock));
 
-  WhileStmt output(loc, condition, body);
+  std::vector<ExprPtr> invariants;
+  if (ctx->invariantClause()) {
+    for (const auto &exprStmt : ctx->invariantClause()->exprStmt()) {
+      auto exprPtr = std::any_cast<ExprPtr>(exprStmt->expr()->accept(this));
+      if (exprPtr) {
+        invariants.push_back(exprPtr);
+      }
+    }
+  }
+
+  WhileStmt output(loc, condition, body, std::move(invariants));
   return output;
 }
 std::any

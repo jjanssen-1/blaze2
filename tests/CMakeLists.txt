@@ -23,5 +23,16 @@ target_include_directories(example_tests PRIVATE
  ${BLAZE_SRC_DIR}/frontend
 )
 
+add_executable(verification_tests
+ verification_tests.cpp
+)
+
+target_link_libraries(verification_tests PRIVATE GTest::gtest_main frontend z3_backend)
+target_include_directories(verification_tests PRIVATE
+ ${BLAZE_SRC_DIR}
+ ${BLAZE_SRC_DIR}/frontend
+)
+
 include(GoogleTest)
 gtest_discover_tests(example_tests)
+gtest_discover_tests(verification_tests)

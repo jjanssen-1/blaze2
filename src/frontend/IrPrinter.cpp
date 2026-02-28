@@ -80,6 +80,10 @@ std::string blaze::frontend::irPrint(const Instruction &instr) {
     const auto dest = irPrint(assignInstr.dest);
     const auto &src = irPrint(assignInstr.src);
     output += fmt::format("{0} = {1}", dest, src);
+  } else if (std::holds_alternative<HavocInstruction>(instr)) {
+    const auto &havocInstr = std::get<HavocInstruction>(instr);
+    const auto dest = irPrint(havocInstr.dest);
+    output += fmt::format("havoc {0}", dest);
   } else if (std::holds_alternative<PhiInstruction>(instr)) {
     const auto &phiInstr = std::get<PhiInstruction>(instr);
     const auto dest = irPrint(phiInstr.dest);

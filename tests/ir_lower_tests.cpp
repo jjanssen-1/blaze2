@@ -818,4 +818,572 @@ TEST(IrLower, NestedContractCallAllInstructionsGhost) {
       << "Expected a non-ghost CallInstruction for 'bar' in 'foo'";
 }
 
+// ---------------------------------------------------------------------------
+// Loop invariant tests
+// ---------------------------------------------------------------------------
+
+TEST(IrLower, InvariantParsesAndLowers) {
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+}
+
+TEST(IrLower, InvariantCheckedBeforeLoop) {
+  // The entry block (block 0) should contain a ContractCheckInstruction
+  // emitted *before* the jump to the loop header.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32"
+                               "  pre { n >= 0; }"
+                               "{"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  const auto &entry = fns[0].blocks[0];
+  bool foundCheck = false;
+  for (const auto &inst : entry.instructions) {
+    if (std::holds_alternative<ContractCheckInstruction>(inst)) {
+      foundCheck = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundCheck)
+      << "Expected a ContractCheckInstruction in entry block for invariant "
+         "establishment";
+}
+
+TEST(IrLower, InvariantAssumedAtLoopHeader) {
+  // The loop header block (block 1) should begin with
+  // ContractAssumeInstruction(s) from the invariant.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+  ASSERT_GE(fns[0].blocks.size(), 2u);
+
+  // Block 1 is the header.
+  const auto &header = fns[0].blocks[1];
+  bool foundAssume = false;
+  for (const auto &inst : header.instructions) {
+    if (std::holds_alternative<ContractAssumeInstruction>(inst)) {
+      EXPECT_TRUE(inst.isGhost);
+      foundAssume = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundAssume)
+      << "Expected a ContractAssumeInstruction in the loop header block";
+}
+
+TEST(IrLower, HavocEmittedForModifiedLoopVariable) {
+  // The loop header should include a havoc for variables modified by the body.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+  ASSERT_GE(fns[0].blocks.size(), 2u);
+
+  const auto &header = fns[0].blocks[1];
+  bool foundHavoc = false;
+  for (const auto &inst : header.instructions) {
+    if (std::holds_alternative<HavocInstruction>(inst)) {
+      EXPECT_TRUE(inst.isGhost);
+      foundHavoc = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundHavoc)
+      << "Expected a HavocInstruction in the loop header for modified variable";
+}
+
+TEST(IrLower, InvariantRecheckedAtEndOfBody) {
+  // The loop body block (block 2) should end with ContractCheckInstruction(s)
+  // just before the back-edge jump.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+  ASSERT_GE(fns[0].blocks.size(), 3u);
+
+  // Block 2 is the body.
+  const auto &body = fns[0].blocks[2];
+  bool foundCheck = false;
+  for (const auto &inst : body.instructions) {
+    if (std::holds_alternative<ContractCheckInstruction>(inst)) {
+      foundCheck = true;
+    }
+  }
+  EXPECT_TRUE(foundCheck)
+      << "Expected a ContractCheckInstruction in the loop body for invariant "
+         "preservation";
+}
+
+TEST(IrLower, InvariantAssumedAfterLoopExit) {
+  // The exit block (block 3) should have ContractAssumeInstruction(s)
+  // so post-loop code can use the invariant as a known fact.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+  ASSERT_GE(fns[0].blocks.size(), 4u);
+
+  // Block 3 is the exit.
+  const auto &exit = fns[0].blocks[3];
+  bool foundAssume = false;
+  for (const auto &inst : exit.instructions) {
+    if (std::holds_alternative<ContractAssumeInstruction>(inst)) {
+      EXPECT_TRUE(inst.isGhost);
+      foundAssume = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundAssume)
+      << "Expected a ContractAssumeInstruction in the loop exit block";
+}
+
+TEST(IrLower, InvariantAllInstructionsAreGhost) {
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Every ContractCheckInstruction and ContractAssumeInstruction in the
+  // function should be ghost.
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst) ||
+          std::holds_alternative<ContractAssumeInstruction>(inst)) {
+        EXPECT_TRUE(inst.isGhost)
+            << "Contract instructions from invariant must be ghost";
+      }
+    }
+  }
+}
+
+TEST(IrLower, MultipleInvariantExpressionsEmitMultipleChecksAndAssumes) {
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32"
+                               "  pre { n >= 0; }"
+                               "{"
+                               "  var acc: i32 = 0;"
+                               "  var i: i32 = 0;"
+                               "  while (i < n)"
+                               "    invariant { acc >= 0; i >= 0; i <= n; }"
+                               "  {"
+                               "    acc = acc + i;"
+                               "    i = i + 1;"
+                               "  }"
+                               "  return acc;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Count checks and assumes across all blocks.
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+
+  // 3 invariants: checked before loop (3) + checked at end of body (3) = 6
+  // plus postcondition checks if any.  With pre only, checks = 6.
+  EXPECT_GE(checkCount, 6)
+      << "Expected at least 6 checks (3 establishment + 3 preservation)";
+  // 3 at loop header + 3 at exit + 1 from precondition assume = 7
+  EXPECT_GE(assumeCount, 7)
+      << "Expected at least 7 assumes (1 pre + 3 header + 3 exit)";
+}
+
+TEST(IrLower, InvariantCheckBeforeJumpToHeader) {
+  // In the entry block, the check for the invariant must appear before the
+  // jump terminator to the header.  Verify ordering: check comes before
+  // the terminator, and the terminator is a jump.
+  auto [ok, diag, fns] = lower("fn foo() -> i32 {"
+                               "  var i: i32 = 5;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  const auto &entry = fns[0].blocks[0];
+  bool foundCheck = false;
+  for (const auto &inst : entry.instructions) {
+    if (std::holds_alternative<ContractCheckInstruction>(inst)) {
+      foundCheck = true;
+    }
+  }
+  EXPECT_TRUE(foundCheck);
+
+  // Terminator should be a jump to the header.
+  ASSERT_TRUE(entry.terminator.has_value());
+  EXPECT_TRUE(std::holds_alternative<JumpTerminator>(*entry.terminator));
+}
+
+TEST(IrLower, NoInvariantNoExtraContractInstructions) {
+  // A while loop without an invariant should not produce any
+  // ContractCheckInstruction or ContractAssumeInstruction beyond
+  // what pre/post already generates.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0) {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+  EXPECT_EQ(checkCount, 0);
+  EXPECT_EQ(assumeCount, 0);
+}
+
+TEST(IrLower, NestedLoopsEachHaveInvariants) {
+  auto [ok, diag, fns] = lower("fn foo(rows: i32, cols: i32) -> i32"
+                               "  pre { rows >= 0; cols >= 0; }"
+                               "{"
+                               "  var total: i32 = 0;"
+                               "  var r: i32 = 0;"
+                               "  while (r < rows)"
+                               "    invariant { total >= 0; r >= 0; }"
+                               "  {"
+                               "    var c: i32 = 0;"
+                               "    while (c < cols)"
+                               "      invariant { c >= 0; total >= 0; }"
+                               "    {"
+                               "      total = total + 1;"
+                               "      c = c + 1;"
+                               "    }"
+                               "    r = r + 1;"
+                               "  }"
+                               "  return total;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Just verify it compiles and produces a reasonable number of contract
+  // instructions from both loops.
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+  // Outer: 2 establishment + 2 preservation = 4 checks
+  // Inner: 2 establishment + 2 preservation = 4 checks
+  // Total checks >= 8
+  EXPECT_GE(checkCount, 8);
+  // 2 pre assumes + outer header(2) + outer exit(2) +
+  // inner header(2) + inner exit(2) = 10
+  EXPECT_GE(assumeCount, 10);
+}
+
+TEST(IrLower, InvariantWithPreAndPost) {
+  // Verify invariants coexist with function-level pre and post contracts.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32"
+                               "  pre { n >= 0; }"
+                               "  post { r: r == 0; }"
+                               "{"
+                               "  var x: i32 = n;"
+                               "  while (x > 0)"
+                               "    invariant { x >= 0; }"
+                               "  {"
+                               "    x = x - 1;"
+                               "  }"
+                               "  return x;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Entry block: pre assume + invariant check + jump
+  const auto &entry = fns[0].blocks[0];
+  bool foundPreAssume = false;
+  bool foundInvCheck = false;
+  for (const auto &inst : entry.instructions) {
+    if (std::holds_alternative<ContractAssumeInstruction>(inst))
+      foundPreAssume = true;
+    if (std::holds_alternative<ContractCheckInstruction>(inst))
+      foundInvCheck = true;
+  }
+  EXPECT_TRUE(foundPreAssume) << "Missing pre assume in entry block";
+  EXPECT_TRUE(foundInvCheck) << "Missing invariant check in entry block";
+
+  // There should be a postcondition check somewhere in the function
+  // (at the return site in the exit block or the block containing return).
+  bool foundPostCheck = false;
+  for (const auto &block : fns[0].blocks) {
+    bool hasReturn =
+        block.terminator.has_value() &&
+        std::holds_alternative<ReturnTerminator>(*block.terminator);
+    if (hasReturn) {
+      for (const auto &inst : block.instructions) {
+        if (std::holds_alternative<ContractCheckInstruction>(inst))
+          foundPostCheck = true;
+      }
+    }
+  }
+  EXPECT_TRUE(foundPostCheck) << "Missing postcondition check at return site";
+}
+
+TEST(IrLower, InvariantOnVoidFunction) {
+  auto [ok, diag, fns] = lower("fn foo(n: i32)"
+                               "  pre { n >= 0; }"
+                               "{"
+                               "  var i: i32 = 0;"
+                               "  while (i < n)"
+                               "    invariant { i >= 0; i <= n; }"
+                               "  {"
+                               "    i = i + 1;"
+                               "  }"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Should still produce contract instructions for the invariant.
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+  // 2 establishment + 2 preservation = 4 checks
+  EXPECT_GE(checkCount, 4);
+  // 1 pre + 2 header + 2 exit = 5
+  EXPECT_GE(assumeCount, 5);
+}
+
+TEST(IrLower, SequentialLoopsEachWithInvariant) {
+  auto [ok, diag, fns] = lower("fn foo(a: i32, b: i32) -> i32"
+                               "  pre { a >= 0; b >= 0; }"
+                               "{"
+                               "  var x: i32 = a;"
+                               "  while (x > 0)"
+                               "    invariant { x >= 0; }"
+                               "  {"
+                               "    x = x - 1;"
+                               "  }"
+                               "  var y: i32 = b;"
+                               "  while (y > 0)"
+                               "    invariant { y >= 0; }"
+                               "  {"
+                               "    y = y - 1;"
+                               "  }"
+                               "  return x + y;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // Two loops, each with 1 invariant:
+  // Loop1: 1 est check + 1 pres check + 1 header assume + 1 exit assume = 4
+  // Loop2: 1 est check + 1 pres check + 1 header assume + 1 exit assume = 4
+  // Plus 2 pre assumes.
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+  EXPECT_GE(checkCount, 4);
+  EXPECT_GE(assumeCount, 6);
+}
+
+TEST(IrLower, InvariantNonBooleanIsTypeError) {
+  // An invariant expression that is not boolean should be caught by
+  // type checking, and lowering should report errors.
+  auto [ok, diag, fns] = lower("fn foo() -> i32 {"
+                               "  var i: i32 = 0;"
+                               "  while (i < 5)"
+                               "    invariant { i; }"
+                               "  {"
+                               "    i = i + 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_FALSE(ok);
+  EXPECT_TRUE(hasDiagnosticWithCode(diag, core::ERROR_TYPE_MISMATCH));
+}
+
+TEST(IrLower, InvariantEmptyClauseProducesNoContractInstructions) {
+  // An invariant clause with no expressions should be valid but produce
+  // no contract instructions.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  int checkCount = 0;
+  int assumeCount = 0;
+  for (const auto &block : fns[0].blocks) {
+    for (const auto &inst : block.instructions) {
+      if (std::holds_alternative<ContractCheckInstruction>(inst))
+        checkCount++;
+      else if (std::holds_alternative<ContractAssumeInstruction>(inst))
+        assumeCount++;
+    }
+  }
+  EXPECT_EQ(checkCount, 0);
+  EXPECT_EQ(assumeCount, 0);
+}
+
+TEST(IrLower, InvariantSubExpressionsInCheckAreGhost) {
+  // The binary comparison generated for the invariant expression must
+  // itself be marked ghost, not just the check instruction.
+  auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
+                               "  var i: i32 = n;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+
+  // In the entry block, find the BinaryInstruction that computes `i >= 0`
+  // for the establishment check — it should be ghost.
+  const auto &entry = fns[0].blocks[0];
+  bool foundGhostBinary = false;
+  for (const auto &inst : entry.instructions) {
+    if (std::holds_alternative<BinaryInstruction>(inst) && inst.isGhost) {
+      foundGhostBinary = true;
+    }
+  }
+  EXPECT_TRUE(foundGhostBinary)
+      << "Expected a ghost BinaryInstruction for the invariant expression";
+}
+
+TEST(IrLower, InvariantBlockStructure) {
+  // Verify the overall block structure:
+  // block 0 = entry (setup + invariant check + jump to header)
+  // block 1 = header (invariant assume + condition eval + branch)
+  // block 2 = body (loop body + invariant check + jump to header)
+  // block 3 = exit (invariant assume + post-loop code)
+  auto [ok, diag, fns] = lower("fn foo() -> i32 {"
+                               "  var i: i32 = 5;"
+                               "  while (i > 0)"
+                               "    invariant { i >= 0; }"
+                               "  {"
+                               "    i = i - 1;"
+                               "  }"
+                               "  return i;"
+                               "}");
+  EXPECT_TRUE(ok);
+  ASSERT_EQ(fns.size(), 1u);
+  ASSERT_GE(fns[0].blocks.size(), 4u);
+
+  // Block 0 terminator: jump to block 1
+  ASSERT_TRUE(fns[0].blocks[0].terminator.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<JumpTerminator>(*fns[0].blocks[0].terminator));
+  EXPECT_EQ(std::get<JumpTerminator>(*fns[0].blocks[0].terminator).target.id,
+            1u);
+
+  // Block 1 terminator: branch to block 2 (body) or block 3 (exit)
+  ASSERT_TRUE(fns[0].blocks[1].terminator.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<BranchTerminator>(*fns[0].blocks[1].terminator));
+  const auto &br = std::get<BranchTerminator>(*fns[0].blocks[1].terminator);
+  EXPECT_EQ(br.consequent.id, 2u);
+  EXPECT_EQ(br.alternative.id, 3u);
+
+  // Block 2 terminator: jump back to block 1 (header)
+  ASSERT_TRUE(fns[0].blocks[2].terminator.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<JumpTerminator>(*fns[0].blocks[2].terminator));
+  EXPECT_EQ(std::get<JumpTerminator>(*fns[0].blocks[2].terminator).target.id,
+            1u);
+
+  // Block 3 terminator: return
+  ASSERT_TRUE(fns[0].blocks[3].terminator.has_value());
+  EXPECT_TRUE(
+      std::holds_alternative<ReturnTerminator>(*fns[0].blocks[3].terminator));
+}
+
 } // namespace blaze::frontend::tests

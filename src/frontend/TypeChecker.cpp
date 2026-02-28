@@ -137,6 +137,18 @@ void TypeChecker::checkStatement(const Statement &stmt) {
                                 statement.location);
       m_error = true;
     }
+    // Check that each loop invariant is a boolean expression.
+    for (const auto &inv : statement.invariants) {
+      checkExpression(inv);
+      auto invType = getExprType(inv);
+      if (invType.has_value() && !isBoolean(*invType)) {
+        m_diagnostics.reportError(core::ERROR_TYPE_MISMATCH,
+                                  "Loop invariant must be a boolean expression",
+                                  inv->location);
+        m_error = true;
+      }
+    }
+
     checkStatement(*statement.body);
   } else if (std::holds_alternative<ExprPtr>(stmt)) {
     const ExprPtr &expr = std::get<ExprPtr>(stmt);

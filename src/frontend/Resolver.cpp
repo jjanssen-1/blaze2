@@ -169,6 +169,10 @@ void Resolver::resolveStatement(const Statement &statement) {
     const auto &whileStmt = std::get<WhileStmt>(statement);
     resolveExpr(whileStmt.condition);
 
+    for (const auto &inv : whileStmt.invariants) {
+      resolveExpr(inv);
+    }
+
     if (whileStmt.body) {
       resolveStatement(*whileStmt.body);
     }

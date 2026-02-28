@@ -109,6 +109,10 @@ struct ContractAssumeInstruction {
   Operand src;
 };
 
+struct HavocInstruction {
+  Register dest;
+};
+
 struct PhiInstruction {
   Register dest;
   std::vector<std::pair<BlockId, Register>> sources;
@@ -120,11 +124,12 @@ struct PhiInstruction {
 struct Instruction
     : public std::variant<BinaryInstruction, UnaryInstruction, CallInstruction,
                           AssignmentInstruction, PhiInstruction,
-                          ContractCheckInstruction, ContractAssumeInstruction> {
-  using Variant =
-      std::variant<BinaryInstruction, UnaryInstruction, CallInstruction,
-                   AssignmentInstruction, PhiInstruction,
-                   ContractCheckInstruction, ContractAssumeInstruction>;
+                          ContractCheckInstruction, ContractAssumeInstruction,
+                          HavocInstruction> {
+  using Variant = std::variant<BinaryInstruction, UnaryInstruction,
+                               CallInstruction, AssignmentInstruction,
+                               PhiInstruction, ContractCheckInstruction,
+                               ContractAssumeInstruction, HavocInstruction>;
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, Instruction> &&

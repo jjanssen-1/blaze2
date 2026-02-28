@@ -2,8 +2,6 @@
 
 #include "backend/VcBackend.h"
 
-#include <z3++.h>
-
 namespace blaze::backend {
 
 class Z3Backend : public VcBackend {
@@ -15,7 +13,6 @@ public:
 private:
   Status m_currentStatus;
   std::vector<CounterExample> m_counterExamples;
-  z3::context m_context;
 
   void verifyFunction(const frontend::IRFunction &function);
 };
