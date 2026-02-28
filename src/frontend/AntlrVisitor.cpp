@@ -23,20 +23,18 @@ BlazeVisitorImpl::sourceLocation(const antlr4::ParserRuleContext *ctx,
   const auto *start = ctx->getStart();
   const auto *stop = ctx->getStop();
 
-  const core::size startIndex = static_cast<core::size>(start->getStartIndex());
-  core::size length = 0;
-  if (stop) {
-    const auto stopIndex = static_cast<core::size>(stop->getStopIndex());
-    if (stopIndex >= startIndex) {
-      length = (stopIndex - startIndex) + 1;
-    }
+  const auto startIndex = start->getStartIndex();
+  const auto stopIndex = stop ? stop->getStopIndex() : startIndex;
+  if (startIndex < 0 || stopIndex < startIndex) {
+    return core::SourceLocation::empty();
   }
 
-  const auto view = source.view(startIndex, length);
+  const core::size startCp = static_cast<core::size>(startIndex);
+  const core::size stopCp = static_cast<core::size>(stopIndex);
   const core::size line = static_cast<core::size>(start->getLine());
   const core::size column =
       static_cast<core::size>(start->getCharPositionInLine());
-  return core::SourceLocation(view, line, column);
+  return source.locationFromCodepointRange(startCp, stopCp, line, column);
 }
 
 std::any BlazeVisitorImpl::visitProgram(BlazeParser::ProgramContext *ctx) {

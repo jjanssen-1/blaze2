@@ -32,11 +32,11 @@ core::SourceLocation tokenLocation(const antlr4::Token *token,
     return core::SourceLocation::empty();
   }
 
-  const auto offset = static_cast<core::size>(startIndex);
-  const auto length = static_cast<core::size>(stopIndex - startIndex + 1);
-  auto view = source.view(offset, length);
-  return core::SourceLocation(view, static_cast<core::size>(line),
-                              static_cast<core::size>(column));
+  const auto startCp = static_cast<core::size>(startIndex);
+  const auto stopCp = static_cast<core::size>(stopIndex);
+  return source.locationFromCodepointRange(startCp, stopCp,
+                                           static_cast<core::size>(line),
+                                           static_cast<core::size>(column));
 }
 
 class DiagnosticErrorListener : public antlr4::BaseErrorListener {

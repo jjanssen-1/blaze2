@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <tl/expected.hpp>
 
@@ -36,7 +37,8 @@ class SourceLocation {
 public:
   static SourceLocation empty();
 
-  SourceLocation(const SourceView &view, size line, size column);
+  SourceLocation(const SourceView &view, size line, size column,
+                 size codepointOffset, size codepointLength);
 
   const SourceView &view() const;
   std::string_view text() const;
@@ -44,11 +46,15 @@ public:
   size length() const;
   size line() const;
   size column() const;
+  size codepointOffset() const;
+  size codepointLength() const;
 
 private:
   SourceView m_view;
   size m_line = 0;
   size m_column = 0;
+  size m_codepointOffset = 0;
+  size m_codepointLength = 0;
 };
 
 class Source {
@@ -64,9 +70,17 @@ public:
 
   SourceView view(size offset, size length) const;
 
+  size byteOffsetForCodepoint(size codepointIndex) const;
+  size byteLengthForCodepointRange(size startCodepoint,
+                                   size endCodepointInclusive) const;
+  SourceLocation locationFromCodepointRange(size startCodepoint,
+                                            size endCodepointInclusive,
+                                            size line, size column) const;
+
 private:
   std::string m_path{};
   std::string m_text{};
+  std::vector<size> m_codepointOffsets{};
 };
 
 } // namespace blaze::core
