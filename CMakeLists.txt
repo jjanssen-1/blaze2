@@ -7,6 +7,17 @@ project(
 
 set(CMAKE_CXX_STANDARD 20)
 
+option(BLAZE_USE_SYSTEM_FMT "Use system-installed fmt" OFF)
+option(BLAZE_USE_SYSTEM_GTEST "Use system-installed GoogleTest" OFF)
+option(BLAZE_USE_SYSTEM_Z3 "Use system-installed Z3" OFF)
+option(BLAZE_USE_SYSTEM_ANTLR4_RUNTIME "Use system-installed ANTLR4 runtime" OFF)
+
+set(BLAZE_EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/build-external" CACHE PATH "External dependencies build/download directory")
+file(MAKE_DIRECTORY "${BLAZE_EXTERNAL_DIR}")
+if(NOT DEFINED FETCHCONTENT_BASE_DIR)
+  set(FETCHCONTENT_BASE_DIR "${BLAZE_EXTERNAL_DIR}/_deps" CACHE PATH "FetchContent base directory")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 set(BLAZE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -38,22 +49,27 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(expected)
 
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG        10.2.1  # Use a specific release tag
-)
+if(BLAZE_USE_SYSTEM_FMT)
+  find_package(fmt CONFIG REQUIRED)
+else()
+  FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG        10.2.1  # Use a specific release tag
+  )
 
-FetchContent_MakeAvailable(fmt)
+  FetchContent_MakeAvailable(fmt)
+endif()
 
 # ANTLR4 versions and download information
 set(ANTLR4_TAG 4.13.2)
 set(ANTLR_JAR_NAME antlr-${ANTLR4_TAG}-complete.jar)
 set(ANTLR_JAR_URL https://www.antlr.org/download/${ANTLR_JAR_NAME})
-set(ANTLR_JAR_PATH ${CMAKE_BINARY_DIR}/tools/${ANTLR_JAR_NAME})
+set(ANTLR_TOOLS_DIR ${BLAZE_EXTERNAL_DIR}/tools)
+set(ANTLR_JAR_PATH ${ANTLR_TOOLS_DIR}/${ANTLR_JAR_NAME})
 
 # Ensure the jar exists at configure time
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tools)
+file(MAKE_DIRECTORY ${ANTLR_TOOLS_DIR})
 if(NOT EXISTS ${ANTLR_JAR_PATH})
   message(STATUS "Downloading ${ANTLR_JAR_NAME}...")
   file(DOWNLOAD

@@ -6,7 +6,14 @@ endif()
 
 include(ExternalProject)
 
-set(ANTLR4_ROOT ${CMAKE_CURRENT_BINARY_DIR}/antlr4_runtime/src/antlr4_runtime)
+if(DEFINED BLAZE_EXTERNAL_DIR)
+  set(ANTLR4_BASE_DIR ${BLAZE_EXTERNAL_DIR}/antlr4_runtime)
+else()
+  set(ANTLR4_BASE_DIR ${CMAKE_CURRENT_BINARY_DIR}/antlr4_runtime)
+endif()
+file(MAKE_DIRECTORY "${ANTLR4_BASE_DIR}")
+
+set(ANTLR4_ROOT ${ANTLR4_BASE_DIR}/src/antlr4_runtime)
 set(ANTLR4_INCLUDE_DIRS ${ANTLR4_ROOT}/runtime/Cpp/runtime/src)
 set(ANTLR4_GIT_REPOSITORY https://github.com/antlr/antlr4.git)
 if(NOT DEFINED ANTLR4_TAG)
@@ -18,6 +25,30 @@ endif()
 # Ensure that the include dir already exists at configure time (to avoid cmake erroring
 # on non-existent include dirs)
 file(MAKE_DIRECTORY "${ANTLR4_INCLUDE_DIRS}")
+
+if(BLAZE_USE_SYSTEM_ANTLR4_RUNTIME)
+  if(NOT ANTLR4_RUNTIME_INCLUDE_DIR)
+    find_path(ANTLR4_RUNTIME_INCLUDE_DIR
+      NAMES antlr4-runtime/antlr4-runtime.h
+    )
+  endif()
+
+  if(NOT ANTLR4_RUNTIME_LIBRARY)
+    find_library(ANTLR4_RUNTIME_LIBRARY
+      NAMES antlr4-runtime antlr4-runtime-static
+    )
+  endif()
+
+  if(NOT ANTLR4_RUNTIME_INCLUDE_DIR OR NOT ANTLR4_RUNTIME_LIBRARY)
+    message(FATAL_ERROR "System ANTLR4 runtime requested but ANTLR4_RUNTIME_INCLUDE_DIR or ANTLR4_RUNTIME_LIBRARY not found.")
+  endif()
+
+  add_library(antlr4_static STATIC IMPORTED)
+  set_target_properties(antlr4_static PROPERTIES
+                        IMPORTED_LOCATION ${ANTLR4_RUNTIME_LIBRARY}
+                        INTERFACE_INCLUDE_DIRECTORIES ${ANTLR4_RUNTIME_INCLUDE_DIR})
+  return()
+endif()
 
 if(${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
   set(ANTLR4_OUTPUT_DIR ${ANTLR4_ROOT}/runtime/Cpp/runtime/$(Configuration))
@@ -86,9 +117,9 @@ endif()
 if(ANTLR4_ZIP_REPOSITORY)
   ExternalProject_Add(
       antlr4_runtime
-      PREFIX antlr4_runtime
+      PREFIX ${ANTLR4_BASE_DIR}
       URL ${ANTLR4_ZIP_REPOSITORY}
-      DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+      DOWNLOAD_DIR ${ANTLR4_BASE_DIR}/download
       BUILD_COMMAND ""
       BUILD_IN_SOURCE 1
       SOURCE_DIR ${ANTLR4_ROOT}
@@ -104,10 +135,10 @@ if(ANTLR4_ZIP_REPOSITORY)
 else()
   ExternalProject_Add(
       antlr4_runtime
-      PREFIX antlr4_runtime
+      PREFIX ${ANTLR4_BASE_DIR}
       GIT_REPOSITORY ${ANTLR4_GIT_REPOSITORY}
       GIT_TAG ${ANTLR4_TAG}
-      DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+      DOWNLOAD_DIR ${ANTLR4_BASE_DIR}/download
       BUILD_COMMAND ""
       BUILD_IN_SOURCE 1
       SOURCE_DIR ${ANTLR4_ROOT}

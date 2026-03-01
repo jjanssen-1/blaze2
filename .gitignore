@@ -14,3 +14,5 @@ build
 .cache
 **/.antlr
 .z3-trace
+build-external
+external-build
