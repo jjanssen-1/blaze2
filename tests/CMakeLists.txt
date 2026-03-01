@@ -37,6 +37,16 @@ target_include_directories(verification_tests PRIVATE
  ${BLAZE_SRC_DIR}/frontend
 )
 
+add_executable(llvm_ir_tests
+ llvm_ir_tests.cpp
+)
+target_link_libraries(llvm_ir_tests PRIVATE GTest::gtest_main frontend llvm_backend)
+target_include_directories(llvm_ir_tests PRIVATE
+ ${BLAZE_SRC_DIR}
+ ${BLAZE_SRC_DIR}/frontend
+)
+
 include(GoogleTest)
 gtest_discover_tests(example_tests)
 gtest_discover_tests(verification_tests)
+gtest_discover_tests(llvm_ir_tests)

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Ast.h"
 #include "core/Common.h"
 #include "core/Source.h"
+#include "frontend/Ast.h"
+
 #include <optional>
 #include <unordered_map>
 #include <variant>

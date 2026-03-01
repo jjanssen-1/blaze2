@@ -328,12 +328,20 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
   }
 
   BlockId consequentBlock = createBlock();
-  BlockId mergeBlock = createBlock();
+  BlockId mergeBlock{0};
+  bool hasMergeBlock = false;
+  auto getMergeBlock = [&]() -> BlockId {
+    if (!hasMergeBlock) {
+      mergeBlock = createBlock();
+      hasMergeBlock = true;
+    }
+    return mergeBlock;
+  };
 
-  // Save the initialized-symbols state before branching. After both
-  // branches execute, only symbols initialized on ALL paths are
-  // considered definitely initialized (intersection).
+  // Save state before branching.
   auto savedInitialized = m_initializedSymbols;
+  auto preBranchRegisters = m_symbolToRegister;
+  BlockId preBlock = currentBlock().id;
 
   if (stmt.alternative.has_value()) {
     BlockId alternativeBlock = createBlock();
@@ -344,23 +352,29 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
 
     // consequent
     m_initializedSymbols = savedInitialized;
+    m_symbolToRegister = preBranchRegisters;
     setCurrentBlock(consequentBlock);
     lowerStatement(*stmt.consequent);
-    bool thenTerminated = currentBlock().terminator.has_value();
-    if (!thenTerminated) {
-      terminate(stmt.location, JumpTerminator{mergeBlock});
+    BlockId thenEndBlock = currentBlock().id;
+    bool consequentTerminated = currentBlock().terminator.has_value();
+    if (!consequentTerminated) {
+      terminate(stmt.location, JumpTerminator{getMergeBlock()});
     }
     auto thenInitialized = m_initializedSymbols;
+    auto consuequentRegisters = m_symbolToRegister;
 
     // alternative
     m_initializedSymbols = savedInitialized;
+    m_symbolToRegister = preBranchRegisters;
     setCurrentBlock(alternativeBlock);
     lowerStatement(**stmt.alternative);
-    bool elseTerminated = currentBlock().terminator.has_value();
-    if (!elseTerminated) {
-      terminate(stmt.location, JumpTerminator{mergeBlock});
+    BlockId elseEndBlock = currentBlock().id;
+    bool alternativeTerminated = currentBlock().terminator.has_value();
+    if (!alternativeTerminated) {
+      terminate(stmt.location, JumpTerminator{getMergeBlock()});
     }
     auto elseInitialized = m_initializedSymbols;
+    auto alternativeRegisters = m_symbolToRegister;
 
     // Merge: a symbol is definitely initialized only if BOTH branches
     // initialized it (intersection).
@@ -372,29 +386,100 @@ void IRBuilder::lowerIfStmt(const IfStmt &stmt) {
     }
 
     // If both branches terminated (e.g. both returned), the merge block
-    // is unreachable.
-    if (thenTerminated && elseTerminated) {
+    // is unreachable, so keep the current block terminated and skip it.
+    if (consequentTerminated && alternativeTerminated) {
+      return;
+    }
+
+    if (hasMergeBlock) {
       setCurrentBlock(mergeBlock);
-      terminate(stmt.location, ReturnTerminator{std::nullopt});
+    }
+
+    const bool consequentReachesMerge = !consequentTerminated;
+    const bool alternativeReachesMerge = !alternativeTerminated;
+
+    if (consequentReachesMerge && alternativeReachesMerge) {
+      std::unordered_map<core::u64, Register> mergedRegisters =
+          preBranchRegisters;
+      for (const auto &[sym, preReg] : preBranchRegisters) {
+        auto consequentIt = consuequentRegisters.find(sym);
+        auto alternativeIt = alternativeRegisters.find(sym);
+        if (consequentIt == consuequentRegisters.end() ||
+            alternativeIt == alternativeRegisters.end())
+          continue;
+
+        if (consequentIt->second.id != alternativeIt->second.id) {
+          Register phiDest = allocateRegister(preReg.type, stmt.location);
+          emit(stmt.location,
+               PhiInstruction{phiDest,
+                              {{thenEndBlock, consequentIt->second},
+                               {elseEndBlock, alternativeIt->second}}});
+          mergedRegisters[sym] = phiDest;
+        } else {
+          mergedRegisters[sym] = consequentIt->second;
+        }
+      }
+      m_symbolToRegister = mergedRegisters;
+    } else if (consequentReachesMerge) {
+      m_symbolToRegister = consuequentRegisters;
+    } else if (alternativeReachesMerge) {
+      m_symbolToRegister = alternativeRegisters;
+    } else {
+      m_symbolToRegister = preBranchRegisters;
     }
   } else {
     // No else: branch to then or straight to merge.
+    BlockId mergeBlock = getMergeBlock();
     terminate(stmt.location,
               BranchTerminator{condReg, consequentBlock, mergeBlock});
 
     m_initializedSymbols = savedInitialized;
+    m_symbolToRegister = preBranchRegisters;
     setCurrentBlock(consequentBlock);
     lowerStatement(*stmt.consequent);
-    if (!currentBlock().terminator.has_value()) {
+    BlockId consequentEndBlock = currentBlock().id;
+    bool consequentTerminated = currentBlock().terminator.has_value();
+    if (!consequentTerminated) {
       terminate(stmt.location, JumpTerminator{mergeBlock});
     }
+    auto consequentRegisters = m_symbolToRegister;
 
     // Without an else branch, the "no-else" path doesn't initialize
     // anything new. Intersection with savedInitialized = savedInitialized.
     m_initializedSymbols = savedInitialized;
+
+    if (hasMergeBlock) {
+      setCurrentBlock(mergeBlock);
+    }
+
+    if (!consequentTerminated) {
+      std::unordered_map<core::u64, Register> mergedRegisters =
+          preBranchRegisters;
+      for (const auto &[sym, preReg] : preBranchRegisters) {
+        auto consequentIt = consequentRegisters.find(sym);
+        if (consequentIt == consequentRegisters.end())
+          continue;
+
+        if (consequentIt->second.id != preReg.id) {
+          Register phiDest = allocateRegister(preReg.type, stmt.location);
+          emit(stmt.location,
+               PhiInstruction{phiDest,
+                              {{consequentEndBlock, consequentIt->second},
+                               {preBlock, preReg}}});
+          mergedRegisters[sym] = phiDest;
+        } else {
+          mergedRegisters[sym] = preReg;
+        }
+      }
+      m_symbolToRegister = mergedRegisters;
+    } else {
+      m_symbolToRegister = preBranchRegisters;
+    }
   }
 
-  setCurrentBlock(mergeBlock);
+  if (hasMergeBlock) {
+    setCurrentBlock(mergeBlock);
+  }
 }
 
 void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
@@ -410,6 +495,7 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   BlockId exitBlock = createBlock();
 
   // Jump from the current block into the loop header.
+  BlockId preBlock = currentBlock().id;
   terminate(stmt.location, JumpTerminator{headerBlock});
 
   // Save state before the loop.
@@ -417,13 +503,21 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   auto preLoopRegisters = m_symbolToRegister;
 
   // Precompute which symbols are assigned in the loop body.
-  std::vector<core::u64> modifiedSymbols;
-  if (hasInvariants) {
-    modifiedSymbols = collectAssignedSymbols(*stmt.body);
-  }
+  std::vector<core::u64> modifiedSymbols = collectAssignedSymbols(*stmt.body);
 
   // --- Emit header with havoc + invariant assumes before lowering body ---
   setCurrentBlock(headerBlock);
+
+  // Create PHI destinations for variables modified in the loop body.
+  std::unordered_map<core::u64, Register> loopPhiDests;
+  for (auto symRaw : modifiedSymbols) {
+    auto preIt = preLoopRegisters.find(symRaw);
+    if (preIt == preLoopRegisters.end())
+      continue;
+    Register phiDest = allocateRegister(preIt->second.type, stmt.location);
+    loopPhiDests.emplace(symRaw, phiDest);
+    m_symbolToRegister[symRaw] = phiDest;
+  }
 
   // Snapshot register map at the header entry.
   auto headerRegisters = m_symbolToRegister;
@@ -458,25 +552,60 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
 
   setCurrentBlock(bodyBlock);
   lowerStatement(*stmt.body);
+  bool hasBackedge = false;
+  BlockId backedgeBlock = bodyBlock;
   if (!currentBlock().terminator.has_value()) {
     // 3. Re-check the invariant at the end of the loop body.
     if (hasInvariants) {
       lowerContractChecks(stmt.invariants);
     }
+    backedgeBlock = currentBlock().id;
     terminate(stmt.location, JumpTerminator{headerBlock});
+    hasBackedge = true;
+  }
+
+  auto bodyRegisters = m_symbolToRegister;
+
+  if (!loopPhiDests.empty()) {
+    auto &headerInstrs = m_blocks[headerBlock.id].instructions;
+    std::vector<Instruction> phiInstrs;
+    phiInstrs.reserve(loopPhiDests.size());
+    for (auto symRaw : modifiedSymbols) {
+      auto phiIt = loopPhiDests.find(symRaw);
+      if (phiIt == loopPhiDests.end())
+        continue;
+      auto preIt = preLoopRegisters.find(symRaw);
+      if (preIt == preLoopRegisters.end())
+        continue;
+
+      std::vector<std::pair<BlockId, Register>> sources;
+      sources.emplace_back(preBlock, preIt->second);
+      if (hasBackedge) {
+        auto bodyIt = bodyRegisters.find(symRaw);
+        if (bodyIt != bodyRegisters.end()) {
+          sources.emplace_back(backedgeBlock, bodyIt->second);
+        }
+      }
+
+      phiInstrs.emplace_back(stmt.location, false,
+                             PhiInstruction{phiIt->second, std::move(sources)});
+    }
+    std::vector<Instruction> rebuilt;
+    rebuilt.reserve(phiInstrs.size() + headerInstrs.size());
+    for (auto &phi : phiInstrs) {
+      rebuilt.push_back(std::move(phi));
+    }
+    for (auto &inst : headerInstrs) {
+      rebuilt.push_back(std::move(inst));
+    }
+    headerInstrs = std::move(rebuilt);
   }
 
   // Restore initialized symbols to pre-loop state.
   m_initializedSymbols = savedInitialized;
 
-  // When invariants are present, restore the header-scope register
-  // mapping so that post-loop code references the registers constrained
-  // by the invariant (and the negated condition).
-  // When there are NO invariants, keep the body-scope mapping to
-  // preserve the existing sound over-approximation behaviour.
-  if (hasInvariants) {
-    m_symbolToRegister = headerRegisters;
-  }
+  // Use the header-scope register mapping after the loop.
+  m_symbolToRegister = headerRegisters;
 
   // Continue emitting after the loop.
   setCurrentBlock(exitBlock);
