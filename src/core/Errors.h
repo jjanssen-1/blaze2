@@ -66,6 +66,9 @@ constexpr u32 ERROR_FUNCTION_NO_TERMINATOR = 3000;
 constexpr u32 ERROR_UNREACHABLE_CODE = 3001;
 constexpr u32 ERROR_USE_BEFORE_INIT = 3002;
 
+// Verification errors
+constexpr u32 ERROR_VERIFICATION_FAILED = 4000;
+
 // Internal errors
 constexpr u32 ERROR_INTERNAL_ERROR = 9999;
 

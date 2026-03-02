@@ -54,6 +54,20 @@ DriverResult run(const CompileOptions &options) {
     backend::Z3Backend z3;
     auto verifyResult = z3.verify(functions);
     if (verifyResult.status != backend::VcBackend::Status::Verified) {
+      for (const auto &cx : verifyResult.counterExamples) {
+        std::string message = "Verification failed";
+        if (cx.violatedPrecondition) {
+          message += ": violated precondition of " +
+                     cx.violatedPrecondition->functionName;
+        }
+        result.diagnostics.reportError(core::ERROR_VERIFICATION_FAILED, message,
+                                       cx.checkLocation);
+      }
+      if (verifyResult.counterExamples.empty()) {
+        result.diagnostics.reportError(core::ERROR_VERIFICATION_FAILED,
+                                       "Verification failed",
+                                       core::SourceLocation::empty());
+      }
       result.status = DriverResult::VerificationFailed;
       return result;
     }
