@@ -1,0 +1,22 @@
+// Demonstrates successful contract verification.
+// Can be tested with `blaze verify tests/testfiles/03_verify_success.blz`
+
+fn non_neg(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r >= 0; }
+{
+  return x;
+}
+
+fn add_one(x: i32) -> i32
+  post { r: r == x + 1; }
+{
+  return x + 1;
+}
+
+fn clamp_low(x: i32) -> i32
+  pre { x >= 0; }
+  post { r: r >= 0; r >= x; }
+{
+  return x + 1;
+}

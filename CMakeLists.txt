@@ -61,6 +61,13 @@ else()
   FetchContent_MakeAvailable(fmt)
 endif()
 
+FetchContent_Declare(
+  cli11
+  GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+  GIT_TAG        v2.4.2
+)
+FetchContent_MakeAvailable(cli11)
+
 # ANTLR4 versions and download information
 set(ANTLR4_TAG 4.13.2)
 set(ANTLR_JAR_NAME antlr-${ANTLR4_TAG}-complete.jar)

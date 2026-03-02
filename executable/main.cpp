@@ -1,75 +1,38 @@
-#include <iostream>
+#include <CLI/CLI.hpp>
+#include <fmt/format.h>
 
-#include "frontend/Builtins.h"
-#include "frontend/FrontendDriver.h"
-#include "frontend/IrLower.h"
-#include "frontend/IrPrinter.h"
+#include "commands/BuildCommand.h"
+#include "commands/EmitCommand.h"
+#include "commands/RunCommand.h"
+#include "commands/VerifyCommand.h"
 
-static const char *severityToString(blaze::core::Severity severity) {
-  switch (severity) {
-  case blaze::core::Severity::info:
-    return "info";
-  case blaze::core::Severity::warning:
-    return "warning";
-  case blaze::core::Severity::error:
-    return "error";
-  case blaze::core::Severity::internal:
-    return "internal";
-  default:
-    return "unknown";
-  }
-}
-
-static void printDiagnostics(const blaze::core::DiagnosticList &diagnostics) {
-  for (const auto &diag : diagnostics) {
-    const auto &loc = diag.sourceLocation;
-    if (loc.line() != 0) {
-      std::cerr << loc.line() << ":" << loc.column() << ": ";
-    }
-    std::cerr << severityToString(diag.severity) << " [" << diag.errorCode
-              << "]: " << diag.message << "\n";
-  }
-}
+#ifdef _WIN32
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
 
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    std::cerr << "Usage: blaze_cli <input-file>\n";
-    return 1;
-  }
+  CLI::App app{"blaze \xe2\x80\x94 the Blaze language compiler"};
+  app.require_subcommand(1);
 
-  blaze::core::DiagnosticList diagnostics;
+  bool isTTY = isatty(fileno(stderr));
 
-  // Parse, resolve, and type check.
-  auto checked = blaze::frontend::checkFile(argv[1], diagnostics);
-  if (!checked) {
-    printDiagnostics(diagnostics);
-    std::cerr << "Failed: " << blaze::frontend::toString(checked.error())
-              << "\n";
-    return 2;
-  }
+  // Global flags
+  bool noColor = !isTTY;
+  bool verbose = false;
+  app.add_flag("--no-color", noColor, "Disable colored output");
+  app.add_flag("--verbose", verbose, "Enable verbose diagnostics");
+  app.set_version_flag("--version", "blaze 0.1.0");
 
-  // Lower to IR.
-  auto symbolTable =
-      std::make_shared<blaze::frontend::SymbolTable>(checked->resolve.symbols);
-  auto builtins = std::make_shared<blaze::frontend::BuiltinRegistry>(
-      checked->resolve.builtins);
+  // Subcommands
+  blaze::cli::registerVerifyCommand(app, noColor, verbose);
+  blaze::cli::registerBuildCommand(app, noColor, verbose);
+  blaze::cli::registerEmitCommand(app, noColor, verbose);
+  blaze::cli::registerRunCommand(app, noColor, verbose);
 
-  blaze::frontend::IRBuilder builder(diagnostics);
-  auto functions = builder.lower(checked->parse.root, symbolTable, builtins);
-
-  if (diagnostics.hasErrors()) {
-    printDiagnostics(diagnostics);
-    std::cerr << "IR lowering produced errors.\n";
-    return 3;
-  }
-
-  // Print any non-fatal diagnostics (warnings, info).
-  printDiagnostics(diagnostics);
-
-  // Print IR to stdout.
-  for (const auto &func : functions) {
-    std::cout << blaze::frontend::irPrint(func);
-  }
-
+  CLI11_PARSE(app, argc, argv);
   return 0;
 }

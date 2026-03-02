@@ -1,0 +1,7 @@
+// A simple main function that returns 0.
+// Useful for testing the `build` and `run` driver commands.
+// Expected exit code: 0
+
+fn main() -> i32 {
+  return 0;
+}

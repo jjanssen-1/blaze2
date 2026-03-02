@@ -46,7 +46,25 @@ target_include_directories(llvm_ir_tests PRIVATE
  ${BLAZE_SRC_DIR}/frontend
 )
 
+add_executable(driver_tests
+ driver_tests.cpp
+)
+target_link_libraries(driver_tests PRIVATE GTest::gtest_main driver)
+target_include_directories(driver_tests PRIVATE
+ ${BLAZE_SRC_DIR}
+)
+
+add_executable(diagnostic_printer_tests
+ diagnostic_printer_tests.cpp
+)
+target_link_libraries(diagnostic_printer_tests PRIVATE GTest::gtest_main core fmt::fmt)
+target_include_directories(diagnostic_printer_tests PRIVATE
+ ${BLAZE_SRC_DIR}
+)
+
 include(GoogleTest)
 gtest_discover_tests(example_tests)
 gtest_discover_tests(verification_tests)
 gtest_discover_tests(llvm_ir_tests)
+gtest_discover_tests(driver_tests)
+gtest_discover_tests(diagnostic_printer_tests)

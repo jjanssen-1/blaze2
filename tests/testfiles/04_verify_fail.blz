@@ -1,0 +1,20 @@
+// Demonstrates a contract verification failure.
+// Running `blaze verify tests/testfiles/04_verify_fail.blz` should report verification errors.
+
+fn incorrect_math(x: i32) -> i32
+  post { r: r == x + 1; }
+{
+  return x;
+}
+
+fn bad_preserve(n: i32) -> i32
+  pre { n >= 0; }
+{
+  var i: i32 = n;
+  while (i > 0 - 10)
+    invariant { i >= 0; }
+  {
+    i = i - 1;
+  }
+  return i;
+}

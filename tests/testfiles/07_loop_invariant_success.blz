@@ -1,0 +1,30 @@
+// Demonstrates successful verification of a loop invariant.
+// Can be tested with `blaze verify tests/testfiles/07_loop_invariant_success.blz`
+
+fn sum_nonneg(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r >= 0; }
+{
+  var acc: i32 = 0;
+  var i: i32 = 0;
+  while (i < n)
+    invariant { acc >= 0; i >= 0; i <= n; }
+  {
+    acc = acc + i;
+    i = i + 1;
+  }
+  return acc;
+}
+
+fn countdown(n: i32) -> i32
+  pre { n >= 0; }
+  post { r: r == 0; }
+{
+  var i: i32 = n;
+  while (i > 0)
+    invariant { i >= 0; }
+  {
+    i = i - 1;
+  }
+  return i;
+}
