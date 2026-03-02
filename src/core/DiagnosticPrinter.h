@@ -11,6 +11,7 @@ namespace blaze::core {
 struct PrintOptions {
   bool useColor = true; // ANSI escape sequences
   int contextLines = 1; // lines above/below the error line to show
+  int tabWidth = 4;     // spaces per tab when rendering carets
 };
 
 class DiagnosticPrinter {

@@ -1,7 +1,0 @@
-// Demonstrates a semantic/type error.
-// Running `blaze build` or `blaze verify` on this should produce a nicely formatted type mismatch error.
-
-fn type_mismatch() -> i32 {
-  var x: bool = true;
-  return x;
-}

@@ -1,6 +1,0 @@
-// Demonstrates a syntax/parse error.
-// Running `blaze build` or `blaze verify` on this should produce a nicely formatted error snippet.
-
-fn badly_formed(x: i32 -> i32 {
-  return x;
-}

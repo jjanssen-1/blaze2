@@ -72,6 +72,45 @@ TEST(Resolver, ReportsUnresolvedOverload) {
   EXPECT_FALSE(diag.empty());
 }
 
+TEST(Resolver, UnresolvedCallProducesExactlyOneDiagnostic) {
+  // Regression test: resolveExpr calls resolveCallExpr once to set the
+  // symbolId, then calls resolveExprType which previously called
+  // resolveCallExpr a second time — producing a duplicate "unresolved overload"
+  // diagnostic for the same call site.  After the fix, resolveExprType reads
+  // the already-stored symbolId instead of re-running overload resolution.
+  auto [ok, diag] = resolve("fn foo() -> i32 { return bar(1); }");
+  EXPECT_FALSE(ok);
+
+  int unresolvedOverloadCount = 0;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_UNRESOLVED_OVERLOAD) {
+      ++unresolvedOverloadCount;
+    }
+  }
+  EXPECT_EQ(unresolvedOverloadCount, 1)
+      << "An unresolved call should produce exactly one "
+         "ERROR_UNRESOLVED_OVERLOAD "
+         "diagnostic, not one per resolveCallExpr invocation";
+}
+
+TEST(Resolver, UnresolvedCallInExpressionProducesExactlyOneDiagnostic) {
+  // Same regression, but the unresolved call appears inside a binary expression
+  // so the type of the sub-expression is also queried, exercising the path
+  // through resolveExprType more deeply.
+  auto [ok, diag] = resolve("fn foo() -> i32 { return bar(1) + 1; }");
+  EXPECT_FALSE(ok);
+
+  int unresolvedOverloadCount = 0;
+  for (const auto &d : diag) {
+    if (d.errorCode == core::ERROR_UNRESOLVED_OVERLOAD) {
+      ++unresolvedOverloadCount;
+    }
+  }
+  EXPECT_EQ(unresolvedOverloadCount, 1)
+      << "An unresolved call inside an expression should still produce exactly "
+         "one ERROR_UNRESOLVED_OVERLOAD diagnostic";
+}
+
 // ---------------------------------------------------------------------------
 // Duplicate / ambiguous declarations
 // ---------------------------------------------------------------------------

@@ -220,9 +220,12 @@ std::any BlazeVisitorImpl::visitAddExpr(BlazeParser::AddExprContext *ctx) {
   auto current = std::any_cast<ExprPtr>(ctx->mulExpr(0)->accept(this));
   for (size_t i = 1; i < ctx->mulExpr().size(); ++i) {
     auto rhs = std::any_cast<ExprPtr>(ctx->mulExpr(i)->accept(this));
-    const BinaryOperation op = ctx->getToken(BlazeParser::PLUS, i - 1)
-                                   ? BinaryOperation::Addition
-                                   : BinaryOperation::Subtraction;
+    auto *opNode =
+        dynamic_cast<antlr4::tree::TerminalNode *>(ctx->children[2 * i - 1]);
+    const bool isPlus =
+        opNode && opNode->getSymbol()->getType() == BlazeParser::PLUS;
+    const BinaryOperation op =
+        isPlus ? BinaryOperation::Addition : BinaryOperation::Subtraction;
     BinaryExpr expr(op, current, rhs);
     current = std::make_shared<Expression>(loc, expr);
   }
@@ -236,9 +239,12 @@ std::any BlazeVisitorImpl::visitMulExpr(BlazeParser::MulExprContext *ctx) {
   auto current = std::any_cast<ExprPtr>(ctx->unaryExpr(0)->accept(this));
   for (size_t i = 1; i < ctx->unaryExpr().size(); ++i) {
     auto rhs = std::any_cast<ExprPtr>(ctx->unaryExpr(i)->accept(this));
-    const BinaryOperation op = ctx->getToken(BlazeParser::STAR, i - 1)
-                                   ? BinaryOperation::Multiplication
-                                   : BinaryOperation::Division;
+    auto *opNode =
+        dynamic_cast<antlr4::tree::TerminalNode *>(ctx->children[2 * i - 1]);
+    const bool isStar =
+        opNode && opNode->getSymbol()->getType() == BlazeParser::STAR;
+    const BinaryOperation op =
+        isStar ? BinaryOperation::Multiplication : BinaryOperation::Division;
     BinaryExpr expr(op, current, rhs);
     current = std::make_shared<Expression>(loc, expr);
   }

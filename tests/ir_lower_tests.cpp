@@ -896,8 +896,12 @@ TEST(IrLower, InvariantAssumedAtLoopHeader) {
       << "Expected a ContractAssumeInstruction in the loop header block";
 }
 
-TEST(IrLower, HavocEmittedForModifiedLoopVariable) {
-  // The loop header should include a havoc for variables modified by the body.
+TEST(IrLower, PhiEmittedForModifiedLoopVariable) {
+  // The loop header should include a PhiInstruction for every variable
+  // modified by the loop body.  The phi merges the pre-loop value (from the
+  // entry block) with the back-edge value (from the body), giving the
+  // verification back-end the correct SSA form without requiring a separate
+  // HavocInstruction.
   auto [ok, diag, fns] = lower("fn foo(n: i32) -> i32 {"
                                "  var i: i32 = n;"
                                "  while (i > 0)"
@@ -911,17 +915,26 @@ TEST(IrLower, HavocEmittedForModifiedLoopVariable) {
   ASSERT_EQ(fns.size(), 1u);
   ASSERT_GE(fns[0].blocks.size(), 2u);
 
+  // Block 1 is the loop header.  It must contain a PhiInstruction whose
+  // destination register has the same type as the modified variable (i32).
   const auto &header = fns[0].blocks[1];
-  bool foundHavoc = false;
+  bool foundPhi = false;
   for (const auto &inst : header.instructions) {
-    if (std::holds_alternative<HavocInstruction>(inst)) {
-      EXPECT_TRUE(inst.isGhost);
-      foundHavoc = true;
-      break;
+    if (std::holds_alternative<PhiInstruction>(inst)) {
+      const auto &phi = std::get<PhiInstruction>(inst);
+      if (phi.dest.type == IRType::I32) {
+        // The phi must have exactly two sources: one from the pre-loop block
+        // and one from the back-edge block.
+        EXPECT_EQ(phi.sources.size(), 2u)
+            << "Loop phi for 'i' should have pre-loop and back-edge sources";
+        foundPhi = true;
+        break;
+      }
     }
   }
-  EXPECT_TRUE(foundHavoc)
-      << "Expected a HavocInstruction in the loop header for modified variable";
+  EXPECT_TRUE(foundPhi)
+      << "Expected a PhiInstruction (i32) in the loop header for modified "
+         "variable 'i'";
 }
 
 TEST(IrLower, InvariantRecheckedAtEndOfBody) {

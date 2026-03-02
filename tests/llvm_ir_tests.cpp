@@ -916,12 +916,13 @@ TEST(LLVMBackend, ManyPostconditions) {
 }
 
 // ---------------------------------------------------------------------------
-// Havoc is a no-op for codegen
+// While loops with invariants compile cleanly
 // ---------------------------------------------------------------------------
 
-TEST(LLVMBackend, WhileLoopWithInvariantHavocIsNoOp) {
-  // Loop invariants cause havoc instructions to be emitted in the IR.
-  // The codegen backend should silently skip them.
+TEST(LLVMBackend, WhileLoopWithInvariantCompilesCleanly) {
+  // Loop invariants cause PHI instructions and contract assume/check
+  // instructions to be emitted in the IR.  The codegen backend must
+  // produce valid LLVM IR for the whole construct.
   auto outcome = build("fn f(n: i32) -> i32 {"
                        "  var i: i32 = 0;"
                        "  while (i < n)"

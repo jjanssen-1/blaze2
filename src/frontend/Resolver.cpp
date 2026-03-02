@@ -324,9 +324,8 @@ std::optional<SymbolId> Resolver::resolveExprType(const ExprPtr &expr) {
   }
   if (std::holds_alternative<CallExpr>(*expr)) {
     const auto &call = std::get<CallExpr>(*expr);
-    auto resolvedId = resolveCallExpr(call, expr->location);
-    if (resolvedId.has_value()) {
-      const auto &symbol = m_symbols.get(resolvedId.value());
+    if (call.identifier.symbolId.has_value()) {
+      const auto &symbol = m_symbols.get(call.identifier.symbolId.value());
       if (const auto *info = std::get_if<FunctionInfo>(&symbol.info)) {
         return info->returnType;
       }

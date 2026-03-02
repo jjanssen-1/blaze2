@@ -523,17 +523,6 @@ void IRBuilder::lowerWhileStmt(const WhileStmt &stmt) {
   auto headerRegisters = m_symbolToRegister;
 
   if (hasInvariants) {
-    // Havoc only the variables modified by the loop body.
-    for (auto symRaw : modifiedSymbols) {
-      auto preIt = preLoopRegisters.find(symRaw);
-      if (preIt == preLoopRegisters.end())
-        continue;
-      Register fresh = allocateRegister(preIt->second.type, stmt.location);
-      emit(stmt.location, true, HavocInstruction{fresh});
-      headerRegisters[symRaw] = fresh;
-      m_symbolToRegister[symRaw] = fresh;
-    }
-
     // Assume invariants before the condition.
     lowerContractAssumption(stmt.invariants);
   }
